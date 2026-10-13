@@ -1,0 +1,17 @@
+# Dữ liệu thật KHÔNG BAO GIỜ vào repo (repo public trên GitHub Pages — chỉ code)
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*.msg
+data/
+_local/
+*.local.md
+.gas-secret.json
+.clasprc.json
+
+node_modules/
+dist/
+test-results/
+playwright-report/
+~$*

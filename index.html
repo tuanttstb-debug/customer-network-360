@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer Network 360</title>
+<meta name="description" content="Mạng lưới đối tác công nợ 131–331 của KHHH — bán chéo vết dầu loang, rủi ro tập trung/lây lan. Đăng nhập bằng tài khoản SHTD.">
+<!-- Kết nối ra ngoài DUY NHẤT: GAS CN360 (dữ liệu, có token) · VietQR / doanhnghiep.vn (tra MST — chỉ MST/tên pháp nhân đối tác, người bấm).
+     Tệp PDF/scan/Excel gốc đọc tại máy, KHÔNG gửi đi. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob:; worker-src blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' blob: data: https://script.google.com https://script.googleusercontent.com https://api.vietqr.io https://doanhnghiep.vn; frame-src 'none'; object-src 'none'; base-uri 'self'">
+<meta name="referrer" content="no-referrer">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234B1FAF'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%23FF7A00'/%3E%3Ccircle cx='7' cy='9' r='2.5' fill='%23fff'/%3E%3Ccircle cx='25' cy='9' r='2.5' fill='%23fff'/%3E%3Ccircle cx='9' cy='25' r='2.5' fill='%23fff'/%3E%3Ccircle cx='24' cy='24' r='2.5' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/app.css">
+</head>
+<body>
+<div id="loginOverlay" class="login-overlay">
+  <form class="login-card" id="loginForm" autocomplete="on">
+    <div class="login-brand"><div class="brand-logo">360</div><div><div class="login-title">Customer Network 360</div><div class="login-sub">Mạng lưới đối tác công nợ 131–331 · TT SP &amp; GP Tín dụng</div></div></div>
+    <label>Tên đăng nhập SHTD<input id="lgUser" autocomplete="username" required></label>
+    <label>Mật khẩu<input id="lgPass" type="password" autocomplete="current-password" required></label>
+    <div id="lgErr" class="alert err" style="display:none"></div>
+    <button class="btn pri block" id="lgBtn" type="submit">Đăng nhập</button>
+    <p class="muted small">Dùng chung tài khoản với SHTD Dashboard. Đang đăng nhập SHTD trên trình duyệt này thì vào thẳng.</p>
+    <p class="muted small">⚠ Hệ thống chứa thông tin khách hàng — chỉ dùng cho công việc, không chụp/chia sẻ ra ngoài.</p>
+  </form>
+</div>
+
+<div class="app" id="app" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="brand-logo">360</div><div class="brand-label">Customer Network 360<div class="brand-sub">TT SP &amp; GP Tín dụng</div></div></div>
+    <nav class="nav-menu" id="nav"></nav>
+    <div class="sidebar-footer"><span id="dbStatus" class="sidebar-footer-text">–</span></div>
+  </aside>
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn" id="hamburger" title="Menu" aria-label="Menu">☰</button>
+      <div class="topbar-title-group"><h1 class="page-title" id="pageTitle">Tổng quan</h1><div class="breadcrumb" id="pageSub"></div></div>
+      <div class="sp"></div>
+      <button class="icon-btn" id="btnReload" title="Tải lại dữ liệu" aria-label="Tải lại">⟳</button>
+      <button class="icon-btn" id="btnTheme" title="Đổi giao diện sáng/tối" aria-label="Giao diện">◐</button>
+      <div class="user-pill" id="userPill"></div>
+    </header>
+    <section class="content" id="view"></section>
+    <footer class="statusbar"><span id="verBadge"></span><span class="sp"></span><span class="muted">Dữ liệu chỉ nằm trong trang này — đóng tab là xóa khỏi máy.</span></footer>
+  </main>
+</div>
+<div id="toasts" class="toasts"></div>
+<div id="modal" class="modal"></div>
+<div id="busy" class="busy"><div class="busy-card"><div class="spinner"></div><div id="busyMsg">Đang xử lý…</div></div></div>
+
+<script src="assets/js/config.js"></script>
+<script src="core/mapping.js"></script>
+<script src="core/parse131.js"></script>
+<script src="core/deskew.js"></script>
+<script src="core/ocr_core.js"></script>
+<script src="core/pipeline.js"></script>
+<script src="core/ocr_loader.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/net.js"></script>
+<script src="assets/js/model.js"></script>
+<script src="assets/js/store.js"></script>
+<script src="assets/js/mst.js"></script>
+<script src="assets/js/xlsx_io.js"></script>
+<script src="assets/js/views/overview.js"></script>
+<script src="assets/js/views/nap.js"></script>
+<script src="assets/js/views/khhh.js"></script>
+<script src="assets/js/views/doitac.js"></script>
+<script src="assets/js/views/cohoi.js"></script>
+<script src="assets/js/views/ruiro.js"></script>
+<script src="assets/js/views/duyet.js"></script>
+<script src="assets/js/views/danhmuc.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
