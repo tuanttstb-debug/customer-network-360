@@ -3,10 +3,11 @@
 Ưu tiên trên xuống. Owner: [CC]=Claude Code · [TT]=Tuân.
 
 ## Cao (2026-10-13 → 2026-10-16)
-1. [TT] Tạo repo GitHub `tuanttstb-debug/customer-network-360` (public, trống) → [CC] commit + push `main` → [TT] Settings → Pages → `main` / root.
-2. [TT] Trên máy công ty: mở https://tuanttstb-debug.github.io/customer-network-360/ → đăng nhập SHTD (hoặc vào thẳng nếu đang mở SHTD) → nạp 1 file Excel giả/ẩn danh → kiểm GAS + VietQR có bị mạng TPBank chặn không.
-3. [TT] Admin: nhập kho v0.1 của team MN (Danh mục → Nhập kho v0.1) khi Duyên đã chạy xong 3 KHHH — hoặc để team nạp trực tiếp trên web.
+1. [TT] Teamlead MN duyệt/từ chối lô thật `LO20261013-0001` (HuongPTT22) — tên đối tác OCR sai nhiều → soát 🖼 ảnh gốc; từ chối kèm lý do nếu cần nạp lại.
+2. [TT] Trên máy công ty: kiểm GAS + VietQR không bị mạng TPBank chặn (Hương đã nạp được qua web 11:34 13/10 → GAS OK).
+3. [CC] Nới cột "KHHH cầu nối" (Cơ hội) · action Admin xóa bộ mẫu theo người nạp `MAU` (khi team bắt đầu dữ liệu thật) → 3 bộ test → push.
 4. [CC] Sau golden Hương (17h 2026-10-14): đo lõi đọc ở AIOS → chép `core/` sang → chạy 3 bộ test.
+5. [TT] Quyết cập nhật bản offline `PhatHanh_v0.1` (vá cắt chữ có dấu) cho team MN hay chuyển hẳn sang web.
 
 ## Trung bình (UAT 2026-10-30/31)
 - [TT] Hướng dẫn team MN (Duyên chủ kho, Hương nạp, QuynhVN6 nghiệm thu) — 30' demo web sau MVP 16/10.

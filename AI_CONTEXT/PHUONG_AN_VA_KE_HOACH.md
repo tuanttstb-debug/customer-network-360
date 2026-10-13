@@ -6,7 +6,7 @@ owner: PER-TTT
 status: da-duyet   # anh Tuân duyệt 2026-10-13 (hướng 1: GAS lưu dữ liệu rõ, chỉ TK chủ mở file DB gốc) — A1–A6 chấp nhận
 created: 2026-10-13
 updated: 2026-10-13
-related: [PHONG_VAN.md, AIOS/05_Journal/decisions/DEC-20261013-02, AIOS/08_Work/W-2610-he-sinh-thai-131-331]
+related: [PHONG_VAN.md, AIOS/05_Journal/decisions/DEC-20261013-01, AIOS/08_Work/W-2610-he-sinh-thai-131-331]
 ---
 
 # Customer Network 360 — phương án & kế hoạch v0.1
@@ -25,7 +25,7 @@ related: [PHONG_VAN.md, AIOS/05_Journal/decisions/DEC-20261013-02, AIOS/08_Work/
 | Ổ team `\\ho-file01` + File System Access API | ❌ loại | Anh xác nhận ổ nội bộ không cho web đọc/ghi/load file (D01). |
 | Server/DB nội bộ TPBank | ⏸ dài hạn | Đúng chuẩn nhất nhưng phụ thuộc IT, không kịp 2026. Giữ thiết kế tách lớp để chuyển sau (mục 9). |
 | Google Workspace TPBank | ❌ không khả dụng | Workspace TPBank chặn Apps Script ngoài; SHTD đã thử và phải quay lại TK cá nhân (D05). |
-| **GAS + Google Sheets trên TK cá nhân (chung SHTD/AIUS)** | ✅ **chọn** | Anh quyết (D01, D05, D06) — đáp ứng kinh doanh trước. **Ngoại lệ luật cứng #1 data-boundary** → DEC-20261013-02, kèm biện pháp kỹ thuật bắt buộc ở mục 6. |
+| **GAS + Google Sheets trên TK cá nhân (chung SHTD/AIUS)** | ✅ **chọn** | Anh quyết (D01, D05, D06) — đáp ứng kinh doanh trước. **Ngoại lệ luật cứng #1 data-boundary** → DEC-20261013-01, kèm biện pháp kỹ thuật bắt buộc ở mục 6. |
 
 **Rủi ro tồn dư em phải nói rõ (anh đã chấp nhận — D06):** dữ liệu khách hàng ngân hàng (tên KHHH, đối tác, số công nợ, cả cá nhân) nằm trên tài khoản Google cá nhân, ngoài kiểm soát của ngân hàng; trách nhiệm giải trình thuộc anh. Biện pháp ở mục 6 giảm khả năng lộ, **không** làm hết rủi ro tuân thủ.
 

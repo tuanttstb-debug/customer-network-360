@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-13 #3 — LIVE + nạp dữ liệu mẫu giả lập)
+- **Việc xong:** push `main` `22ad475` → anh bật Pages → **LIVE** · nạp bộ MẪU giả lập template (12 KHHH · 36 đối tác · 96 lô · 480 dòng, tháng→quý) vào `CN360_DB` qua Sheets connector sau khi xem trước trên backend giả lập (0 lỗi JS) · DEC ngoại lệ ghi ở AIOS `DEC-20261013-01`.
+- **File đổi:** `AI_CONTEXT/{PROJECT_STATE,TODO_NEXT,SESSION_HANDOVER,PHUONG_AN_VA_KE_HOACH,PROJECT_OVERVIEW,TECH_DEBT}.md` (số DEC) · DB live: KHHH/DoiTac/TenGop/Lo/CongNo (+ mẫu).
+- **Quyết định:** dữ liệu mẫu đánh dấu `MAU` / `LO20261013-Mxxx` để xóa dễ · không ghi thẳng Sheet khi đã có người dùng.
+- **Blocker:** không.
+- **Bước kế:** [TT] teamlead MN duyệt lô `LO20261013-0001` · [CC] nới cột cầu nối + action xóa mẫu.
+- **Rủi ro hồi quy:** thấp — chỉ thêm dữ liệu; đã đọc lại Lo/KHHH/DoiTac/TenGop/CongNo sau ghi: đủ mẫu + đủ lô của Hương (ghi trùng thời điểm, không mất dòng).
+
 ## Delta phiên (2026-10-13 #2 — build v0.1.0: backend GAS deploy + FE 8 trang + 3 bộ test)
 - **Việc xong:** anh duyệt kế hoạch (D12 — giữ GAS dữ liệu rõ, chỉ TK chủ mở file DB) · backend 8 file (`gas/`) → clasp push + deploy @1, anh chạy setupAll (DB `1E4xevOsik…`) · FE khuôn SHTD 8 trang + lõi v0.1 + vendor tự host · test GAS 58 · mô hình 34 · E2E 42 (dữ liệu giả) · phát hiện + vá lỗi lõi `parse131.js` cắt chữ có dấu ở đầu/cuối tên (sửa gốc AIOS + chép sang).
 - **File đổi:** toàn repo (lần đầu): `index.html` · `assets/{css,js,js/views}` · `core/` · `vendor/` · `gas/` · `test/` · `tools/sync_gas.mjs` · `README.md` · `CLAUDE.md` · `AI_CONTEXT/*`.
