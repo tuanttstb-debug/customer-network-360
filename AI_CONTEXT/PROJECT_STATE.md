@@ -17,6 +17,7 @@ Web CN360 v0.1.0 **build + LIVE trong ngày 13/10** theo kế hoạch đã duy�
 - SHTD `User_Master` (chỉ đọc) + `AUTH_SECRET` chung · VietQR / doanhnghiep.vn từ trình duyệt (chỉ MST/tên pháp nhân đối tác).
 
 ## Đang treo
+- **[CC] Tra MST/CIF nội bộ TPBank (WIP `wip/mst-noi-bo`, 2026-10-15):** code + test GAS/MST xong, E2E MST còn 1 lỗi → chưa deploy. Thiết kế: `PHUONG_AN_TRA_MST_NOI_BO.md`.
 - [TT] teamlead MN duyệt/từ chối lô `LO20261013-0001` (soát tên OCR bằng ảnh gốc trước) · xác nhận teamlead trong `User_Master` đúng Team.
 - [CC] cột "KHHH cầu nối" trang Cơ hội hẹp → nới · action Admin xóa bộ mẫu `MAU` một lần.
 

@@ -2,6 +2,15 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-15 — tra MST/CIF NỘI BỘ TPBank trước công cụ ngoài · WIP nhánh `wip/mst-noi-bo`, CHƯA push/deploy)
+- **Việc xong:** quét `TRA CUU MST.xlsx` (800k MST + 134k CIF KH line CB) → phỏng vấn 7 câu → phương án D (lai) anh duyệt (`PHUONG_AN_TRA_MST_NOI_BO.md`) → build: `tools/build_mst_index.py` (ra `D:\Công việc\USMN\Nen\_build\20261015-1752\` — 870.025 pháp nhân 11,8 MB · 110.399 MST có CIF) · lõi `core/mstmatch.js` · `gas/Mst.gs` (tải lên/tải về chỉ mục, MST→CIF chỉ server, tự điền CIF khi lưu lô/sửa MST, sync-cif, gỡ, guard) · FE `assets/js/mstidx.js` + worker · bước ③ tự tra nội bộ · Đối tác "Tìm MST (nội bộ)" + "Đối chiếu CIF nội bộ" · Danh mục tab "MST nội bộ" (tra thử + Admin tải lên/gỡ) · model: có CIF = Đã là KH TPBank.
+- **Đo trên chỉ mục thật (tên làm méo, `tools/eval_mst_match.mjs`):** nguyên văn top1 96% · viết tắt/bỏ dấu 95% · OCR 1 ký tự 84% · tự điền ~54% với độ đúng 99,8% (ngưỡng điểm ≥ 0,86 + cách ứng viên 2 ≥ 0,10) · ~22 ms/tên · dựng chỉ mục ~14 s, ~380 MB heap (Node).
+- **Test:** GAS 58/58 · mô hình 34/34 · MST mới 55/55 · E2E cũ 40/40 nhưng **phần E2E MST mới lỗi 1** (timeout 15 s ở `test/e2e.mjs:278` — chờ "Chưa có chỉ mục" trong tab Danh mục → MST nội bộ; chưa điều tra). 1 lần chạy trước timeout ở bước đăng nhập đầu (chạy lại thì qua — nghi chập chờn).
+- **Quyết định:** PA D — chỉ mục tên→MST (không CIF) tải về trình duyệt + IndexedDB (ngoại lệ A4, xóa khi đăng xuất/30 ngày) · CIF chỉ GAS, ≤ 1.000 MST/lần, có nhật ký · cho phép lưu CIF vào DoiTac (anh duyệt câu 4) · bỏ cá nhân/HKD (MST 12 số) · TT SP dùng chung · ngưỡng tự điền 0,86/0,10.
+- **Blocker:** E2E MST chưa xanh → chưa push, chưa clasp push/deploy.
+- **Bước kế:** [CC] sửa E2E dòng 278 → 4 bộ test xanh → merge `main` + push · `clasp push` + deploy @2 (thêm `Mst.gs`) · [TT] đăng nhập Admin → Danh mục → MST nội bộ → chọn 3 tệp trong `_build\20261015-1752\` → Tải lên → thử trên máy công ty (tải lần đầu ~12 MB, RAM máy) · [CC] cập nhật CLAUDE.md (gate thêm `node test/mst.test.mjs`; ngoại lệ A4 IndexedDB) · [TT] Teamlead bấm "Đối chiếu CIF nội bộ" cho đối tác cũ.
+- **Rủi ro hồi quy:** trung bình — chạm `submit-batch`/`_applyDtEdit_` (bọc try, không chặn khi thiếu chỉ mục — có test) · bước ③ tự gọi `mst-meta` khi vào (không chỉ mục → chỉ đổi dòng trạng thái). Dữ liệu nội bộ chỉ ở `_build` ngoài repo; `.gitignore` chặn `*.gz`, `_build/`, `manifest.json`.
+
 ## Delta phiên (2026-10-13 #3 — LIVE + nạp dữ liệu mẫu giả lập)
 - **Việc xong:** push `main` `22ad475` → anh bật Pages → **LIVE** · nạp bộ MẪU giả lập template (12 KHHH · 36 đối tác · 96 lô · 480 dòng, tháng→quý) vào `CN360_DB` qua Sheets connector sau khi xem trước trên backend giả lập (0 lỗi JS) · DEC ngoại lệ ghi ở AIOS `DEC-20261013-01`.
 - **File đổi:** `AI_CONTEXT/{PROJECT_STATE,TODO_NEXT,SESSION_HANDOVER,PHUONG_AN_VA_KE_HOACH,PROJECT_OVERVIEW,TECH_DEBT}.md` (số DEC) · DB live: KHHH/DoiTac/TenGop/Lo/CongNo (+ mẫu).

@@ -3,6 +3,7 @@
 Ưu tiên trên xuống. Owner: [CC]=Claude Code · [TT]=Tuân.
 
 ## Cao (2026-10-13 → 2026-10-16)
+0. [CC] **MST nội bộ (nhánh `wip/mst-noi-bo`)**: sửa E2E MST (`test/e2e.mjs:278` timeout) → 4 bộ test xanh → merge main + push → `clasp push` + deploy @2 → [TT] Admin tải 3 tệp `D:\Công việc\USMN\Nen\_build\20261015-1752\` lên ở Danh mục → MST nội bộ → thử máy công ty → Teamlead "Đối chiếu CIF nội bộ".
 1. [TT] Teamlead MN duyệt/từ chối lô thật `LO20261013-0001` (HuongPTT22) — tên đối tác OCR sai nhiều → soát 🖼 ảnh gốc; từ chối kèm lý do nếu cần nạp lại.
 2. [TT] Trên máy công ty: kiểm GAS + VietQR không bị mạng TPBank chặn (Hương đã nạp được qua web 11:34 13/10 → GAS OK).
 3. [CC] Nới cột "KHHH cầu nối" (Cơ hội) · action Admin xóa bộ mẫu theo người nạp `MAU` (khi team bắt đầu dữ liệu thật) → 3 bộ test → push.

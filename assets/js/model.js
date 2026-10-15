@@ -51,7 +51,8 @@
     const known = [...(data.khhh || []).map(k => ({ cif: k.cif, mst: k.mst, ten: k.ten, nguon: 'KHHH' })), ...(data.khTP || []).map(k => ({ cif: k.cif, mst: k.mst, ten: k.ten, nguon: 'KH TPBank' }))];
     const byMst = new Map(known.filter(k => k.mst).map(k => [String(k.mst).trim(), k])), byKey = new Map(known.filter(k => k.ten).map(k => [KEY(k.ten), k]));
     const daLaKH = new Map();
-    dts.forEach(d => { const m = (d.mst && byMst.get(String(d.mst).trim())) || byKey.get(KEY(d.ten)); daLaKH.set(d.id, m || null); });
+    // + CIF tra từ file nội bộ TPBank (server tự điền cột "CIF (nếu là KH TP)" khi có MST — gas/Mst.gs)
+    dts.forEach(d => { const m = (d.mst && byMst.get(String(d.mst).trim())) || byKey.get(KEY(d.ten)) || (d.cifTP ? { cif: d.cifTP, mst: d.mst, ten: d.ten, nguon: 'CIF nội bộ' } : null); daLaKH.set(d.id, m || null); });
 
     // Lô mới nhất (≤ ngày báo cáo) theo KHHH + TK → số dư cuối kỳ
     const latest = new Map();

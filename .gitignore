@@ -15,3 +15,11 @@ dist/
 test-results/
 playwright-report/
 ~$*
+
+# Chỉ mục MST nội bộ TPBank (build ngoài repo — tools/build_mst_index.py)
+*.gz
+_build/
+mst_index*
+name_index*
+cif_map*
+manifest.json

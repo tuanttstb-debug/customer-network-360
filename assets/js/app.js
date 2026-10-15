@@ -44,7 +44,7 @@
       : `<a class="nav-item ${cur === x.id ? 'active' : ''}" href="#/${x.id}" data-id="${x.id}"><span class="nav-icon">${x.ic}</span><span class="nav-label">${esc(x.t)}</span>${x.badge && S.pendingForMe ? `<span class="nav-badge" title="Mục chờ bạn duyệt">${S.pendingForMe}</span>` : ''}</a>`).join('');
     const u = S.user;
     $('userPill').innerHTML = u ? `<span class="avatar">${esc((u.displayName || u.username).split(' ').pop().slice(0, 2).toUpperCase())}</span><span class="user-meta"><b>${esc(u.displayName || u.username)}</b><small>${esc(u.role)} · ${esc(u.team || '—')}</small></span><button class="btn sm ghost" id="btnLogout">Đăng xuất</button>` : '';
-    if ($('btnLogout')) $('btnLogout').onclick = () => { CN.net.clearSession(); CN.store.S.data = null; showLogin(''); };
+    if ($('btnLogout')) $('btnLogout').onclick = () => { CN.net.clearSession(); if (CN.mstidx) CN.mstidx.clear(); CN.store.S.data = null; showLogin(''); };
     $('dbStatus').textContent = S.loadedAt ? 'Dữ liệu lúc ' + S.loadedAt.toLocaleTimeString('vi-VN') + ' · ' + S.data.lots.filter(l => l.status === 'Đã duyệt').length + ' lô' : '–';
   }
 
