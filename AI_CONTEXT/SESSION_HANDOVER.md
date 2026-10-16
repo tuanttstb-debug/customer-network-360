@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-16 — sửa E2E MST → merge main → GAS @2 + Pages LIVE)
+- **Việc xong:** E2E MST timeout do `crypto.subtle` (kiểm sha256 3 tệp ở Danh mục) chỉ có trong secure context, trang test chạy `http://cn360.test` → test thêm cờ Chrome `--unsafely-treat-insecure-origin-as-secure` (prod https không bị, không sửa FE). Merge `wip/mst-noi-bo` → `main` `20e7693`, push; `clasp push` + anh chạy `clasp deploy -i … @2` (giữ URL); Pages phục vụ `mstidx.js` 200. CLAUDE.md: gate thêm `mst.test`, ghi ngoại lệ A4 IndexedDB.
+- **Files changed:** `test/e2e.mjs` (cờ launch) · `CLAUDE.md` · `AI_CONTEXT/{PROJECT_STATE,TODO_NEXT,SESSION_HANDOVER}.md`. Nhánh `wip/mst-noi-bo` đã xóa (local).
+- **Decision made:** không thêm — thực thi DEC-20261015-02 (D13).
+- **Blocker:** không. Chỉ mục MST chưa tải lên prod → tính năng báo "Chưa có chỉ mục" tới khi Admin tải.
+- **Next step:** [TT] Admin tải 3 tệp `_build\20261015-1752\` → thử máy công ty (RAM/tải 12 MB, mạng TPBank) → Teamlead "Đối chiếu CIF nội bộ".
+- **Regression risk:** Trung bình — `submit-batch`/`_applyDtEdit_` có gọi tự điền CIF (bọc try, không chặn khi thiếu chỉ mục). Test: GAS 58 · mô hình 34 · MST 55 · E2E 57 — tất cả xanh.
+
 ## Delta phiên (2026-10-15 — tra MST/CIF NỘI BỘ TPBank trước công cụ ngoài · WIP nhánh `wip/mst-noi-bo`, CHƯA push/deploy)
 - **Việc xong:** quét `TRA CUU MST.xlsx` (800k MST + 134k CIF KH line CB) → phỏng vấn 7 câu → phương án D (lai) anh duyệt (`PHUONG_AN_TRA_MST_NOI_BO.md`) → build: `tools/build_mst_index.py` (ra `D:\Công việc\USMN\Nen\_build\20261015-1752\` — 870.025 pháp nhân 11,8 MB · 110.399 MST có CIF) · lõi `core/mstmatch.js` · `gas/Mst.gs` (tải lên/tải về chỉ mục, MST→CIF chỉ server, tự điền CIF khi lưu lô/sửa MST, sync-cif, gỡ, guard) · FE `assets/js/mstidx.js` + worker · bước ③ tự tra nội bộ · Đối tác "Tìm MST (nội bộ)" + "Đối chiếu CIF nội bộ" · Danh mục tab "MST nội bộ" (tra thử + Admin tải lên/gỡ) · model: có CIF = Đã là KH TPBank.
 - **Đo trên chỉ mục thật (tên làm méo, `tools/eval_mst_match.mjs`):** nguyên văn top1 96% · viết tắt/bỏ dấu 95% · OCR 1 ký tự 84% · tự điền ~54% với độ đúng 99,8% (ngưỡng điểm ≥ 0,86 + cách ứng viên 2 ≥ 0,10) · ~22 ms/tên · dựng chỉ mục ~14 s, ~380 MB heap (Node).
