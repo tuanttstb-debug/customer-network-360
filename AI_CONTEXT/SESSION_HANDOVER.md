@@ -8,6 +8,7 @@
 - **Decision made:** không thêm — thực thi DEC-20261015-02 (D13).
 - **Blocker:** không. Chỉ mục MST chưa tải lên prod → tính năng báo "Chưa có chỉ mục" tới khi Admin tải.
 - **Next step:** [TT] Admin tải 3 tệp `_build\20261015-1752\` → thử máy công ty (RAM/tải 12 MB, mạng TPBank) → Teamlead "Đối chiếu CIF nội bộ".
+- **Vá @3 (cùng ngày):** tải chỉ mục lỗi "Session.getEffectiveUser … userinfo.email" → `Mst.gs` lấy chủ qua `folder.getOwner()`; harness giả lập ném lỗi như GAS thật.
 - **Regression risk:** Trung bình — `submit-batch`/`_applyDtEdit_` có gọi tự điền CIF (bọc try, không chặn khi thiếu chỉ mục). Test: GAS 58 · mô hình 34 · MST 55 · E2E 57 — tất cả xanh.
 
 ## Delta phiên (2026-10-15 — tra MST/CIF NỘI BỘ TPBank trước công cụ ngoài · WIP nhánh `wip/mst-noi-bo`, CHƯA push/deploy)
