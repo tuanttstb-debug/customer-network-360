@@ -158,7 +158,8 @@ console.log('— KHHH nội bộ (khối K trong tệp CIF): tìm theo CIF/MST/�
   ok(!!cache.getAll(['kh:20261016-0900:01'])['kh:20261016-0900:01'], 'tải lên → hâm sẵn cache KH theo bucket CIF (nén)');
   ok(call('u_mn', 'mst-cif', { msts: ['0100000001'] }).data.map['0100000001'].cif === '90000001', 'khối K không làm hỏng tra MST→CIF');
   E.ctx._khMem_ = null;   // lượt sau đọc từ cache, không đọc tệp
-  const f1 = call('u_mn', 'kh-find', { q: '90000001', context: 'test' }).data.items;
+  const r1 = call('u_mn', 'kh-find', { q: '90000001', context: 'test' }).data, f1 = r1.items;
+  ok(r1.src === 'cache', 'lượt tra đọc từ cache (không đọc lại tệp): src=' + r1.src);
   ok(f1.length === 1 && f1[0].mst === '0100000001' && f1[0].cn === '001-HKM-Hoàn Kiếm' && f1[0].ten === 'CÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT', 'CIF → đúng 1 KH + MST + tên có dấu + CN "001-HKM-Hoàn Kiếm" (đọc từ cache)');
   const f2 = call('u_mn', 'kh-find', { q: '0100000006' }).data.items;
   ok(f2.length === 2 && f2.map(x => x.cif).sort().join() === '90000006,90000007', 'MST → mọi CIF của MST đó');

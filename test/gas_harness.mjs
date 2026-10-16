@@ -87,7 +87,8 @@ export function makeEnv({ users = [], props = {}, owner = 'owner@gmail.com' } = 
     LockService: { getScriptLock: () => ({ waitLock: () => { lockDepth++; if (lockDepth > 1) throw new Error('lock lồng nhau'); }, releaseLock: () => { lockDepth--; } }) },
     CacheService: { getScriptCache: () => ({ get: k => (cacheStore.has(k) ? cacheStore.get(k) : null), put: (k, v) => cacheStore.set(k, v), remove: k => cacheStore.delete(k),
       getAll: ks => Object.fromEntries(ks.filter(k => cacheStore.has(k)).map(k => [k, cacheStore.get(k)])),
-      putAll: o => { Object.entries(o).forEach(([k, v]) => { if (String(v).length > 100000) throw new Error('cache value > 100KB'); cacheStore.set(k, v); }); } }) },
+      // GAS thật từ chối cả lô putAll vài MB (prod 16/10: không cache được gì) → mô phỏng giới hạn tổng 1 MB/lần
+      putAll: o => { if (Object.values(o).reduce((s, v) => s + String(v).length, 0) > 1e6) throw new Error('putAll quá cỡ'); Object.entries(o).forEach(([k, v]) => { if (String(v).length > 100000) throw new Error('cache value > 100KB'); cacheStore.set(k, v); }); } }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in P ? P[k] : null), setProperty: (k, v) => { P[k] = String(v); } }) },
     Utilities: {
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },

@@ -53,6 +53,12 @@ function _mstDigits_(m) { return str_(m).replace(/\D/g, ''); }
 function _mstKey_(m) { var d = _mstDigits_(m); return d.length === 13 ? d.slice(0, 10) + '-' + d.slice(10) : d.length === 10 ? d : ''; }
 function _cifBucket_(key) { return key.slice(8, 10); }
 
+/** Ghi cache TỪNG khóa (putAll vài MB một lần bị GAS từ chối cả lô → không cache được gì — prod 16/10). → số khóa ghi được. */
+function cachePutEach_(cache, obj) {
+  var n = 0;
+  Object.keys(obj).forEach(function (k) { try { cache.put(k, obj[k], MST_CACHE_S); n++; } catch (e) { /* khóa quá cỡ → bỏ, lượt sau đọc tệp */ } });
+  return n;
+}
 var _cifMem_ = null;   // trong 1 request
 /** keys (MST chuẩn) → {key: 'cif|brn|seg'} cho các bucket cần; nạp file + cache khi thiếu. */
 function _cifBuckets_(m, keys) {
@@ -71,7 +77,7 @@ function _cifBuckets_(m, keys) {
       var k = line.split('\t')[0], b = 'cif:' + m.version + ':' + _cifBucket_(k);
       all[b] = (all[b] || '') + line + '\n';
     });
-    try { cache.putAll(all, MST_CACHE_S); } catch (e) { /* cache đầy/quá cỡ → vẫn dùng bản trong bộ nhớ */ }
+    cachePutEach_(cache, all);
     _cifMem_ = { v: m.version, b: all };
     return all;
   }
@@ -126,9 +132,11 @@ function dvkdLabel_(m, brn) {
 }
 function _khB_(cif) { return ('00' + str_(cif).replace(/\D/g, '')).slice(-2); }
 var _khMem_ = null;   // trong 1 request: {v, b: {bucket: text}}
+var _khSrc_ = '';      // nguồn lượt tra gần nhất: mem | cache | file (đo hiệu năng)
 /** Đọc cả khối K (1 lần / 6 giờ / phiên bản) → bucket → cache. */
 function _khAll_(m) {
-  if (_khMem_ && _khMem_.v === m.version) return _khMem_.b;
+  if (_khMem_ && _khMem_.v === m.version) { _khSrc_ = 'mem'; return _khMem_.b; }
+  _khSrc_ = 'file';
   var f = mstFile_(mstFolder_(false), m.version + '.cif');
   if (!f) throw new Error('Thiếu file CIF của chỉ mục ' + m.version + '.');
   var text = Utilities.ungzip(Utilities.newBlob(f.getBlob().getBytes(), 'application/x-gzip')).getDataAsString('UTF-8');
@@ -139,14 +147,15 @@ function _khAll_(m) {
   });
   var put = {};
   Object.keys(all).forEach(function (b) { put['kh:' + m.version + ':' + b] = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(all[b], 'text/plain')).getBytes()); });
-  try { CacheService.getScriptCache().putAll(put, MST_CACHE_S); } catch (e) { /* cache đầy → vẫn dùng bản trong bộ nhớ */ }
+  cachePutEach_(CacheService.getScriptCache(), put);
   _khMem_ = { v: m.version, b: all };
   return all;
 }
 function _khBuckets_(m, bs) {
-  if (_khMem_ && _khMem_.v === m.version) return _khMem_.b;
+  if (_khMem_ && _khMem_.v === m.version) { _khSrc_ = 'mem'; return _khMem_.b; }
   var names = bs.map(function (b) { return 'kh:' + m.version + ':' + b; }), got = CacheService.getScriptCache().getAll(names), out = {};
   if (names.some(function (n) { return !got[n]; })) return _khAll_(m);
+  _khSrc_ = 'cache';
   bs.forEach(function (b, i) { out[b] = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(got[names[i]]), 'application/x-gzip')).getDataAsString('UTF-8'); });
   return out;
 }
@@ -190,7 +199,7 @@ function apiKhFind_(u, body) {
   }
   items = items.slice(0, KH_FIND_MAX);
   withLock_(function () { log_(u, 'Tìm KHHH nội bộ', str_(body.context).slice(0, 80), what + ' → ' + items.length + ' KH'); });
-  return { version: m.version, items: items };
+  return { version: m.version, items: items, src: _khSrc_ };
 }
 /** {CIF: KH chuẩn} cho các CIF — dùng khi lưu lô / chuẩn hóa KHHH. null nếu chưa có chỉ mục. */
 function khStd_(cifs) {
