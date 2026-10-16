@@ -196,7 +196,7 @@ function apiMstRemove_(u) {
 function enforceMstPrivate_() {
   var folder = mstFolder_(false), removed = [];
   if (!folder) return { removed: removed };
-  var owner = Session.getEffectiveUser().getEmail();
+  var owner = folder.getOwner().getEmail();   // không dùng Session.getEffectiveUser — cần scope userinfo.email (manifest không khai)
   var lock = function (x, label) {
     if (x.getSharingAccess() !== DriveApp.Access.PRIVATE) { removed.push(label + ' link'); x.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE); }
     x.getEditors().forEach(function (p) { if (p.getEmail() !== owner) { x.removeEditor(p); removed.push(label + ' editor:' + p.getEmail()); } });

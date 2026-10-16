@@ -108,7 +108,8 @@ export function makeEnv({ users = [], props = {}, owner = 'owner@gmail.com' } = 
     },
     ScriptApp: { getProjectTriggers: () => triggers.slice(), deleteTrigger: t => { triggers.splice(triggers.indexOf(t), 1); },
       newTrigger: fn => { const t = { getHandlerFunction: () => fn }; const chain = { timeBased: () => chain, everyDays: () => chain, atHour: () => chain, create: () => { triggers.push(t); return t; } }; return chain; } },
-    Session: { getEffectiveUser: () => person(owner) },
+    // GAS thật: thiếu scope userinfo.email trong appsscript.json → lỗi quyền (prod 16/10)
+    Session: { getEffectiveUser: () => { throw new Error('Specified permissions are not sufficient to call Session.getEffectiveUser. Required permissions: https://www.googleapis.com/auth/userinfo.email'); } },
     Logger: { log: m => logs.push(String(m)) },
   };
   ctx.globalThis = ctx;
