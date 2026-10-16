@@ -152,7 +152,9 @@ console.log('— KHHH nội bộ (khối K trong tệp CIF): tìm theo CIF/MST/�
     + 'K\t90000006\t0100000006\t015\t110010\tCTY TNHH THEP GIA SAU\tCÔNG TY TNHH THÉP GIẢ SÁU\n'
     + 'K\t90000007\t0100000006\t002\t110010\tTHEP GIA SAU HD CU\tCÔNG TY TNHH THÉP GIẢ SÁU\n'
     + 'K\t90000008\t\t001\t110000\tCONG TY TNHH CHUA CO MST GIA\t\n'
-    + 'K\t90000010\t0100000010\t001\t110000\tCTY TNHH MUOI GIA\tCÔNG TY TNHH MƯỜI GIẢ\n';
+    + 'K\t90000010\t0100000010\t001\t110000\tCTY TNHH MUOI GIA\tCÔNG TY TNHH MƯỜI GIẢ\n'
+    + 'K\t90000011\t0100000011\t276\t110030\tCTY CPDT VA PTNL MAT TROI GIA KHOA\t\n'
+    + 'K\t90000012\t0100000012\t001\t110000\tCONG TY TNHH MAT TROI GIA\tCÔNG TY TNHH MẶT TRỜI GIẢ\n';
   const P3 = pack('20261016-0900', tsv, CIFK, 50000);
   P3.manifest.dvkd = { '001': { label: '001-HKM-Hoàn Kiếm', ptkd: 'PTKD_GIA', loai: 'CN Siêu cấp', tinh: 'Hà Nội', vung: 'Vùng 1' },
     '015': '015-TTKD_LTT-TTKD Lê Trọng Tấn (đã sáp nhập → 046)', 'x1': 'bỏ' };   // 015 dạng chuỗi = manifest cũ vẫn chạy
@@ -173,7 +175,19 @@ console.log('— KHHH nội bộ (khối K trong tệp CIF): tìm theo CIF/MST/�
   ok(f8.mst === '' && f8.ten === 'CONG TY TNHH CHUA CO MST GIA', 'KH chưa có MST: tìm theo CIF được, tên = tên trên hệ thống TPB');
   ok(f1[0].tenHT === 'CTY CP XD GIA LAP MOT' && f1[0].ten900 === 'CÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT' && f1[0].ptkd === 'PTKD_GIA' && f1[0].loaiDvkd === 'CN Siêu cấp' && f1[0].tinh === 'Hà Nội',
     'KH trả đủ: tên hệ thống · tên 900k · PTKD · loại ĐVKD · tỉnh trước sáp nhập (BLOCK)');
-  ok(call('u_mn', 'kh-find', { q: 'Cty Giả' }).status === 'error', 'gửi TÊN lên server → từ chối (tên tra trên máy)');
+  // Tìm theo TÊN ở máy chủ (16/10): KH line CB trước — bỏ dấu, mở viết tắt CPDT/PTNL/&, tên chỉ có trên hệ thống TPB vẫn ra
+  const n1 = call('u_mn', 'kh-find', { q: 'mat troi gia khoa' }).data.items;
+  ok(n1.length === 1 && n1[0].cif === '90000011' && n1[0].via === 'ten-TPB' && n1[0].tenHT === 'CTY CPDT VA PTNL MAT TROI GIA KHOA', 'tên không dấu → KH chỉ có tên hệ thống viết tắt (CIF 90000011)');
+  const n2 = call('u_mn', 'kh-find', { q: 'Công ty CP Đầu tư & Phát triển Năng lượng Mặt Trời Giả Khoa' }).data.items;
+  ok(n2[0] && n2[0].cif === '90000011', 'tên đầy đủ có dấu + "&" → khớp "CTY CPDT VA PTNL …"');
+  const n3 = call('u_mn', 'kh-find', { q: 'Mặt Trời Giả' }).data.items.map(x => x.cif);
+  ok(n3[0] === '90000012' && n3.includes('90000011'), 'tên ngắn khớp trọn ("MẶT TRỜI GIẢ") xếp trước tên dài chứa cụm');
+  const n4 = call('u_mn', 'kh-find', { q: 'mat troi gia khoa', msts: ['0100000006', '0100000011'] }).data.items.map(x => x.cif + ':' + x.via);
+  ok(n4.join() === '90000011:ten-TPB,90000006:MST-900k,90000007:MST-900k', 'gộp: khớp tên TPB trước → KH theo MST ứng viên 900k sau, không trùng CIF (' + n4.join() + ')');
+  ok(call('u_mn', 'kh-find', { q: 'ab' }).status === 'error', 'tên < 3 ký tự → lỗi');
+  ok([...E.cacheStore.keys()].some(k => /^khn:20261016-0900:/.test(k)), 'bảng tên chuẩn hóa vào cache (mảnh ≤ 90 KB)');
+  E.ctx._khnMem_ = null; E.ctx._khMem_ = null;
+  ok(call('u_mn', 'kh-find', { q: 'mat troi gia khoa' }).data.items[0].cif === '90000011', 'lượt sau đọc bảng tên từ cache');
   ok(call('u_mn', 'kh-find', { q: '12' }).status === 'error', '< 3 số → lỗi');
   ok(E.call({ action: 'kh-find', q: '90000001' }).error === 'AUTH_REQUIRED', 'kh-find không token → AUTH_REQUIRED');
   ok(E.db().table('NhatKy').some(r => r['Hành động'] === 'Tìm KHHH nội bộ'), 'nhật ký: tìm KHHH nội bộ');

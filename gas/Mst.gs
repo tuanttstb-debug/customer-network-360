@@ -188,21 +188,63 @@ function khByMsts_(m, msts) {
   });
   return khByCifs_(m, cifs);
 }
-/** body.q = CIF hoặc MST (chỉ số) | body.msts = MST ứng viên từ tra tên trên máy (≤ 20) → ≤ 20 KH {cif, mst, ten, brn, cn, seg}. */
+/* ---------- Tìm KH TPBank theo TÊN (anh Tuân 16/10: tìm TPBank TRƯỚC → rồi 900k qua MST) ----------
+ * Bảng tên chuẩn hóa "CIF<TAB>TÊN HT | TÊN 900K" (KHN.line — bỏ dấu, mở viết tắt CPDT/PTNL/&…) dựng 1 lần từ khối K,
+ * nén → cache 6 giờ theo mảnh ≤ 90 KB. Tên chỉ so trong GAS — không gửi danh sách KH về trình duyệt. */
+var KHN_CHUNK = 90000, KHN_MAX_MSTS = 60;
+var _khnMem_ = null;   // trong 1 request: {v, lines}
+function _khNames_(m) {
+  if (_khnMem_ && _khnMem_.v === m.version) return _khnMem_.lines;
+  var cache = CacheService.getScriptCache(), pre = 'khn:' + m.version + ':', nk = cache.get(pre + 'n'), text = null;
+  if (nk) {
+    var ks = []; for (var i = 0; i < +nk; i++) ks.push(pre + i);
+    var got = cache.getAll(ks);
+    if (ks.every(function (k) { return got[k]; })) {
+      var b64 = ks.map(function (k) { return got[k]; }).join('');
+      text = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(b64), 'application/x-gzip')).getDataAsString('UTF-8');
+    }
+  }
+  if (text === null) {
+    var all = _khAll_(m), out = [];
+    Object.keys(all).forEach(function (b) { all[b].split('\n').forEach(function (line) {
+      if (line.charAt(0) !== 'K') return; var e = line.split('\t'); out.push(KHN.line(e[1], e[5] || '', e[6] || ''));
+    }); });
+    text = out.join('\n');
+    var z = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(text, 'text/plain')).getBytes()), put = {}, n = Math.ceil(z.length / KHN_CHUNK);
+    for (var j = 0; j < n; j++) put[pre + j] = z.slice(j * KHN_CHUNK, (j + 1) * KHN_CHUNK);
+    if (cachePutEach_(cache, put) === n) cache.put(pre + 'n', String(n), MST_CACHE_S);
+  }
+  _khnMem_ = { v: m.version, lines: text ? text.split('\n') : [] };
+  return _khnMem_.lines;
+}
+/** Tên → [KH] khớp tên TPB (điểm giảm dần), mỗi KH kèm via='ten-TPB' + diem. */
+function khByName_(m, q, k) {
+  var hits = KHN.search(_khNames_(m), q, k || KH_FIND_MAX), sc = {};
+  hits.forEach(function (h) { sc[h.cif] = h.score; });
+  return khByCifs_(m, hits.map(function (h) { return h.cif; })).map(function (x) { x.via = 'ten-TPB'; x.diem = sc[x.cif]; return x; });
+}
+/** body.q = CIF/MST (chỉ số) hoặc TÊN · body.msts = MST ứng viên từ chỉ mục 900k trên máy (≤ 60)
+ *  → ≤ 20 KH {cif, mst, ten, brn, cn, seg, via}: khớp tên TPB trước, rồi KH có MST trong ứng viên 900k (giữ thứ tự ứng viên). */
 function apiKhFind_(u, body) {
   var m = mstManifest_();
   if (!m) return { version: null, items: [] };
-  var items, what;
-  if (body.msts) {
-    var ms = (body.msts || []).map(str_).filter(Boolean).slice(0, KH_FIND_MAX);
-    items = khByMsts_(m, ms); what = 'tên → ' + ms.length + ' MST';
-  } else {
-    var raw = str_(body.q).trim(), dig = raw.replace(/[\s.\-]/g, '');
-    if (!/^\d{3,}$/.test(dig)) throw new Error('Gõ CIF hoặc MST (chỉ số, ≥ 3 ký tự) — tìm theo tên dùng chỉ mục trên máy.');
+  var items = [], what = [], raw = str_(body.q).trim(), dig = raw.replace(/[\s.\-]/g, '');
+  if (raw && /^\d{3,}$/.test(dig)) {
     items = (dig.length === 10 || dig.length === 13) ? khByMsts_(m, [raw]) : [];
     if (!items.length) items = khByCifs_(m, [dig]);
-    what = raw.slice(0, 20);
+    what.push(raw.slice(0, 20));
+  } else if (raw) {
+    if (/^\d+$/.test(dig) || KHN.query(raw).phrase.replace(/ /g, '').length < 3) throw new Error('Gõ CIF/MST (≥ 3 số) hoặc tên (≥ 3 ký tự).');
+    items = khByName_(m, raw); what.push('tên TPB → ' + items.length);
   }
+  if (body.msts) {
+    var ms = (body.msts || []).map(str_).filter(Boolean).slice(0, KHN_MAX_MSTS), seen = {};
+    items.forEach(function (x) { seen[x.cif] = true; });
+    khByMsts_(m, ms).forEach(function (x) { if (!seen[x.cif]) { seen[x.cif] = true; x.via = x.via || 'MST-900k'; items.push(x); } });
+    what.push('900k → ' + ms.length + ' MST');
+  }
+  if (!raw && !body.msts) throw new Error('Thiếu nội dung tìm.');
+  what = what.join(' · ');
   items = items.slice(0, KH_FIND_MAX);
   log_(u, 'Tìm KHHH nội bộ', str_(body.context).slice(0, 80), what + ' → ' + items.length + ' KH');   // appendRow nguyên tử — không chờ khóa ghi
   return { version: m.version, items: items, src: _khSrc_ };
@@ -372,7 +414,7 @@ function apiMstUpload_(u, body) {
   var it = folder.getFiles();
   while (it.hasNext()) { var x = it.next(), nm = x.getName(); if (nm !== 'manifest.json' && nm.indexOf(v + '.') !== 0) x.setTrashed(true); }
   CacheService.getScriptCache().remove('mst:man');
-  try { _khMem_ = null; _khAll_(out); } catch (e) { /* hâm cache lỗi → lượt tra đầu tự nạp */ }
+  try { _khMem_ = null; _khnMem_ = null; _khAll_(out); _khNames_(out); } catch (e) { /* hâm cache lỗi → lượt tra đầu tự nạp */ }
   var g = enforceMstPrivate_();
   withLock_(function () { log_(u, 'Tải lên chỉ mục MST nội bộ', v, JSON.stringify(out.counts) + (g.removed.length ? ' · gỡ chia sẻ: ' + g.removed.join(', ') : '')); });
   return out;

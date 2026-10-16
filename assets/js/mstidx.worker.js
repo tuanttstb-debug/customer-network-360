@@ -19,7 +19,7 @@ self.onmessage = async e => {
       const out = [];
       for (let i = 0; i < m.names.length; i++) {
         if (i % 20 === 0) progress('search', i / m.names.length);
-        out.push(MSTM.search(I, m.names[i], m.k || 5));
+        out.push(MSTM.search(I, m.names[i], m.k || 5, m.opts));
       }
       self.postMessage({ id, type: 'done', data: out });
     }

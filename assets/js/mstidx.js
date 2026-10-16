@@ -91,9 +91,9 @@
   }
 
   /** Tên → [{cands:[{mst,name,score,branch}], auto}] · null nếu chưa có chỉ mục. Ghi nhật ký số lượng (không ghi tên). */
-  async function search(names, onProgress, context, k) {
+  async function search(names, onProgress, context, k, opts) {
     if (!(await ensure())) return null;
-    const out = await rpc({ type: 'search', names, k: k || 5 }, [], (ph, p) => { if (onProgress) onProgress(p); });
+    const out = await rpc({ type: 'search', names, k: k || 5, opts: opts || null }, [], (ph, p) => { if (onProgress) onProgress(p); });
     CN.net.call('log', { what: 'Tra MST nội bộ', target: context || '', detail: names.length + ' tên · ' + out.filter(r => r.auto).length + ' tự điền' }).catch(() => {});
     return out;
   }
@@ -108,6 +108,30 @@
     return { map };
   }
 
+  /** Tìm KH TPBank theo TÊN (anh Tuân 16/10): ① máy chủ so tên trong danh sách KH line CB (tên hệ thống + tên 900k, bỏ dấu, mở viết tắt)
+   *  ② song song: chỉ mục 900k trên máy (dấu/viết tắt/lỗi chính tả) → ≤ 40 MST → máy chủ trả KH có MST đó. Gộp: ① trước, ② sau, không trùng CIF.
+   *  → {items: [KH + via 'ten-TPB'|'MST-900k'] | null (chưa có chỉ mục trên máy chủ), cands: ứng viên 900k | null, idxErr} */
+  async function findKh(q, context, onStatus) {
+    const off = onStatus ? on(st => onStatus(st.msg)) : null;
+    try {
+      // GAS cũ (trước 16/10) từ chối tên → không làm hỏng lượt tìm, chỉ còn nhánh 900k
+      const p1 = CN.net.call('kh-find', { q, context }, { timeoutMs: 90000 }).catch(e => ({ version: 'loi', items: [], err: e.message }));
+      const p2 = (async () => {
+        const res = await search([q], null, context, 40, { contain: true });
+        if (!res) return { cands: null, items: [] };
+        const cands = res[0].cands;
+        if (!cands.length) return { cands, items: [] };
+        const r = await CN.net.call('kh-find', { msts: cands.map(c => c.mst), context }, { timeoutMs: 90000 });
+        return { cands, items: r.items || [] };
+      })().catch(e => ({ cands: null, items: [], err: e.message }));
+      const [r1, r2] = await Promise.all([p1, p2]);
+      if (!r1.version) return { items: null, cands: r2.cands };
+      const seen = new Set(), items = [];
+      (r1.items || []).concat(r2.items.map(x => Object.assign(x, { via: x.via || 'MST-900k' }))).forEach(x => { if (!seen.has(x.cif)) { seen.add(x.cif); items.push(x); } });
+      return { items: items.slice(0, 20), cands: r2.cands, idxErr: r2.err || '' };
+    } finally { if (off) off(); }
+  }
+
   /** Xóa chỉ mục khỏi máy này (đăng xuất / người dùng bấm). */
   function clear() {
     if (worker) { worker.terminate(); worker = null; }
@@ -117,5 +141,5 @@
 
   const label = () => 'Nội bộ TPBank ' + (X.version || '');
   const on = f => { subs.add(f); return () => subs.delete(f); };
-  CN.mstidx = { ensure, search, cif, clear, label, on, state: X };
+  CN.mstidx = { ensure, search, findKh, cif, clear, label, on, state: X };
 })();

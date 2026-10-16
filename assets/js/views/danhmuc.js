@@ -34,11 +34,13 @@
       const off = CN.mstidx.on(st => { if ($('mstSt')) $('mstSt').textContent = st.msg; });
       try {
         $('mstGo').disabled = true;
-        const res = await CN.mstidx.search([q], null, 'Danh mục (tra thử)');
-        if (res === null) { $('mstSt').textContent = CN.mstidx.state.msg; return; }
-        const cs = res[0].cands, cif = cs.length ? (await CN.mstidx.cif(cs.map(c => c.mst), 'Danh mục (tra thử)')).map : {};
-        $('mstSt').textContent = cs.length ? (res[0].auto ? 'Ứng viên 1 đủ chắc để máy tự điền (≥ 86% và cách ứng viên 2 ≥ 10 điểm).' : 'Chưa đủ chắc để tự điền — người chọn.') : 'Không có ứng viên.';
-        $('mstRes').innerHTML = cs.length ? `<div class="tblwrap"><table class="tbl" id="mstTbl"><thead><tr><th>MST</th><th>Tên</th><th>Điểm khớp</th><th>KH TPBank</th></tr></thead><tbody>${cs.map(c => `<tr><td class="code">${esc(c.mst)}${c.branch ? ' ' + chip('chi nhánh', 'gray') : ''}</td><td>${esc(c.name)}</td><td>${Math.round(100 * c.score)}%</td><td>${cif[c.mst] ? chip('CIF ' + cif[c.mst].cif + (cif[c.mst].via === 'cty-me' ? ' (cty mẹ)' : ''), 'ok') : '—'}</td></tr>`).join('')}</tbody></table></div>` : '';
+        // ① KH TPBank (KH line CB, so tên ở máy chủ) → ② 900k trên máy (dấu · viết tắt · lỗi chính tả) → MST
+        const fk = await CN.mstidx.findKh(q, 'Danh mục (tra thử)');
+        if (fk.items === null) { $('mstSt').textContent = 'Chưa có chỉ mục trên máy chủ.'; return; }
+        const kh = fk.items, cs = (fk.cands || []).slice(0, 10), cif = cs.length ? (await CN.mstidx.cif(cs.map(c => c.mst), 'Danh mục (tra thử)')).map : {};
+        $('mstSt').textContent = `KH TPBank: ${kh.length} · ứng viên 900k: ${fk.cands === null ? 'chưa có chỉ mục trên máy' : cs.length}` + (fk.idxErr ? ' · ' + fk.idxErr : '');
+        const khTbl = kh.length ? `<h3>KH TPBank khớp</h3><div class="tblwrap"><table class="tbl" id="mstKhTbl"><thead><tr><th>CIF</th><th>Tên trên hệ thống TPB</th><th>Tên 900k</th><th>MST</th><th>CN</th><th>Khớp theo</th></tr></thead><tbody>${kh.map(k => `<tr><td class="code">${esc(k.cif)}</td><td>${esc(k.tenHT || '')}</td><td>${esc(k.ten900 || '—')}</td><td class="code">${esc(k.mst || '—')}</td><td>${esc(k.cn)}</td><td>${k.via === 'ten-TPB' ? chip('Tên KH TPBank', 'ok') : chip('Tên 900k → MST', 'gray')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Không thấy KH TPBank nào khớp tên.</p>';
+        $('mstRes').innerHTML = khTbl + (cs.length ? `<h3>Ứng viên MST (900k)</h3><div class="tblwrap"><table class="tbl" id="mstTbl"><thead><tr><th>MST</th><th>Tên</th><th>Điểm khớp</th><th>KH TPBank</th></tr></thead><tbody>${cs.map(c => `<tr><td class="code">${esc(c.mst)}${c.branch ? ' ' + chip('chi nhánh', 'gray') : ''}</td><td>${esc(c.name)}</td><td>${Math.round(100 * c.score)}%</td><td>${cif[c.mst] ? chip('CIF ' + cif[c.mst].cif + (cif[c.mst].via === 'cty-me' ? ' (cty mẹ)' : ''), 'ok') : '—'}</td></tr>`).join('')}</tbody></table></div>` : '');
         meta();
       } catch (e) { $('mstSt').textContent = e.message; } finally { off(); if ($('mstGo')) $('mstGo').disabled = false; }
     };

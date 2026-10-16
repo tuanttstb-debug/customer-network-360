@@ -3,6 +3,7 @@
 Ưu tiên trên xuống. Owner: [CC]=Claude Code · [TT]=Tuân.
 
 ## Cao (2026-10-13 → 2026-10-16)
+000. [TT] 2026-10-16: clasp push + deploy GAS v0.4.2 (giữ URL) → thử tìm "mat troi bach khoa" (Danh mục → MST nội bộ · bước ① Nạp) → phải ra CIF 77768686 · CN 276.
 00. [TT] 2026-10-16: push v0.4.1 → thử nạp 4 tệp Excel ICV trên web (Excel là luồng chính) → báo nếu tệp phần mềm khác không nhận được tiêu đề (gửi [CC] tệp để mở rộng).
 0. [TT] 2026-10-16: tải chỉ mục `D:\Công việc\USMN\Nen\_build\20261016-1401\` (Danh mục → MST nội bộ) → thử "Chuẩn hóa KHHH" (danh sách + chi tiết) với KHHH đã đổi MST → báo lỗi nếu có.
 0b. [TT] Chốt cách xóa 12 KHHH MẪU: (a) xóa tay ×12 · (b) [CC] thêm nút Admin "Xóa bộ MẪU" (1 lần deploy) → rồi team MN nạp lô thật (Hương nạp lại).

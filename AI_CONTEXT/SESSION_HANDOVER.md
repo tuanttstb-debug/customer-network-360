@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-16 tối #2 — lỗi tìm "mat troi bach khoa" · tìm KH: TPBank trước → 900k · v0.4.2, FE + GAS)
+- **Task completed:** tái hiện trên chỉ mục thật (`tools/probe_kh_name.mjs`): CIF 77768686 có MST 0304194942 nhưng không có tên 900k → đường cũ (900k top 15 → KH) trả rỗng. Thêm tìm tên ở GAS trong KH line CB (`core/khname.js`, sinh `gas/KhName.gs` qua `tools/sync_gas.mjs`) + `CN.mstidx.findKh` (song song ① GAS tên TPB · ② 900k trên máy → MST) dùng cho bước ① Nạp + Danh mục tra thử; `mstmatch` mở thêm viết tắt TPB (CPDT/PTNL/DT/PT/NL/&/CT CP…) + opts.contain; FE chịu GAS cũ (lùi về 900k).
+- **Files changed:** `core/khname.js` (mới) · `gas/KhName.gs` (sinh) · `gas/Mst.gs` (`_khNames_` cache `khn:` · `khByName_` · `apiKhFind_` nhận tên + gộp msts) · `core/mstmatch.js` · `assets/js/{mstidx,mstidx.worker,config}.js` · `views/{nap,danhmuc}.js` · `tools/{sync_gas,probe_khname,probe_kh_name}.mjs` · test `mst.test.mjs` (+7, bỏ test "từ chối tên") · `e2e.mjs` (+2).
+- **Decision made:** đảo quyết định 15/10 "tên chỉ tra trên máy, server không nhận tên" — nay server nhận TÊN truy vấn để so trong KH line CB (theo flow anh Tuân 16/10); danh sách KH vẫn không về trình duyệt, nhật ký chỉ ghi số lượng.
+- **Blocker:** cần [TT] `clasp deploy` GAS (giữ URL) — trước khi deploy, FE vẫn chạy (chỉ còn nhánh 900k).
+- **Next step:** [TT] clasp push + deploy → thử "mat troi bach khoa" ở Danh mục → MST nội bộ và bước ① Nạp · lượt đầu sau deploy dựng bảng tên (vài giây–chục giây), sau đó cache 6 giờ.
+- **Regression risk:** trung bình — `kh-find` đổi hợp đồng (q chữ được chấp nhận); `mstmatch.norm` đổi → chỉ mục 900k dựng lại theo norm mới khi tải trang (không cần build lại tệp). Test: GAS 60 · mô hình 34 · MST 91 · Excel 26 · E2E 66.
+
 ## Delta phiên (2026-10-16 tối — CR anh Tuân: Excel là luồng nạp chính · v0.4.1, chỉ FE)
 - **Task completed:** bộ đọc Excel theo cột `core/xlsx131.js` thay đường "sheet → chữ OCR giả → bố cục" (giữ làm dự phòng) · mã ĐT dạng MST → điền sẵn MST + khớp đối tác theo MST (chip "MST theo mã ĐT trên sổ — nên Kiểm MST") · CCCD 12 số → cá nhân · TK con → Ghi chú dòng · gợi ý ① "ưu tiên Excel". Chẩn đoán "lỗi font" tệp Kho_DoiTac_…20261015: **không phải giao diện/xuất file** — chuỗi Unicode chuẩn NFC, 0 ký tự hỏng; 3 PDF nguồn là ảnh scan RICOH không có lớp chữ → sai chữ do **OCR bản mờ** (vd "CÔ PHÁN", đuôi rác "3”I", kỳ 2025 đọc thành 2015).
 - **Files changed:** `core/xlsx131.js` (mới) · `assets/js/views/nap.js` · `index.html` · `assets/js/config.js` (v0.4.1) · `test/xlsx.test.mjs` (mới, 26) · `test/e2e.mjs` (fixture 331 dạng sổ kế toán, +4) · `tools/probe_xlsx.mjs` (đo tệp thật, chỉ in số đếm) · `CLAUDE.md` (gate + ngoại lệ nguồn gốc xlsx131).

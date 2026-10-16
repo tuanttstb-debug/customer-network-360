@@ -19,6 +19,9 @@
     TM: 'THUONG MAI', DV: 'DICH VU', TMDV: 'THUONG MAI DICH VU', DVTM: 'DICH VU THUONG MAI', XD: 'XAY DUNG', SX: 'SAN XUAT', XNK: 'XUAT NHAP KHAU',
     DNTN: 'DOANH NGHIEP TU NHAN', HTX: 'HOP TAC XA', KD: 'KINH DOANH', VN: 'VIET NAM', TPHCM: 'THANH PHO HO CHI MINH', HCM: 'HO CHI MINH',
     TCT: 'TONG CONG TY', VPDD: 'VAN PHONG DAI DIEN', LTD: 'TNHH', JSC: 'CO PHAN', COMPANY: 'CONG TY',
+    // viết tắt kiểu tên hệ thống TPB ("CTY CPDT VA PTNL …") — 16/10
+    CPDT: 'CO PHAN DAU TU', DT: 'DAU TU', PT: 'PHAT TRIEN', NL: 'NANG LUONG', PTNL: 'PHAT TRIEN NANG LUONG', DTPT: 'DAU TU PHAT TRIEN', DTXD: 'DAU TU XAY DUNG',
+    XL: 'XAY LAP', KT: 'KY THUAT', TV: 'TU VAN', CK: 'CO KHI', TB: 'THIET BI', VLXD: 'VAT LIEU XAY DUNG', BDS: 'BAT DONG SAN', QT: 'QUOC TE',
   };
   // Cụm loại hình — dài trước ngắn sau; bit dùng so loại hình hai bên
   const F = { TNHH: 1, CP: 2, DNTN: 4, HTX: 8, CN: 16, VPDD: 32, TCT: 64, CTY: 128 };
@@ -34,9 +37,10 @@
   }
   /** Chuẩn hóa: bỏ dấu, HOA, ký tự lạ → khoảng trắng, mở viết tắt. */
   function norm(s) {
-    let t = boDau(s).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    let t = boDau(s).toUpperCase().replace(/&/g, ' VA ').replace(/[^A-Z0-9]+/g, ' ').trim();
     if (!t) return '';
-    return t.split(' ').map((w, i) => (w === 'CN' && i === 0 ? 'CHI NHANH' : ABBR[w] || w)).join(' ');
+    const ws = t.split(' ');
+    return ws.map((w, i) => (w === 'CN' && i === 0 ? 'CHI NHANH' : w === 'CT' && /^(CP|CPDT|TNHH|MTV)$/.test(ws[i + 1] || '') ? 'CONG TY' : ABBR[w] || w)).join(' ');
   }
   /** Tên → { core: 'TEN LOI', toks: [...], forms: bitmask } */
   function analyze(s) {
@@ -131,9 +135,10 @@
     return res.sort((a, b) => I.df[b] - I.df[a]).slice(0, 3);
   }
 
-  /** Tên → tối đa `k` ứng viên {mst, name, score, branch} + auto (đủ chắc để tự điền). */
-  function search(I, q, k) {
-    k = k || 5;
+  /** Tên → tối đa `k` ứng viên {mst, name, score, branch} + auto (đủ chắc để tự điền).
+   *  opts.contain (ô tìm KH): người gõ một phần tên → tên chứa ĐỦ mọi token lõi được cộng điểm (không áp cho tự điền MST đối tác). */
+  function search(I, q, k, opts) {
+    k = k || 5; opts = opts || {};
     const a = analyze(q);
     if (!a.toks.length) return { cands: [], auto: false };
     // token truy vấn → [{id, w}] (token lạ → token gần, trọng số 0,8)
@@ -185,10 +190,11 @@
       let wd = 0, inter = 0;
       const dset = new Set();
       for (let p = I.docOff[d]; p < I.docOff[d + 1]; p++) { const v = I.docTok[p]; dset.add(v); wd += I.idf[v]; }
-      for (const x of qt) { const hit = x.ids.find(v => dset.has(v)); if (hit !== undefined) inter += Math.min(x.w, I.idf[hit]) * x.f; }
-      return [d, inter / Math.max(1e-9, wq + wd - inter)];
-    }).sort((x, y) => y[1] - x[1]).slice(0, DICE_TOP);
-    const scored = wjOf.map(([d, wj]) => {
+      let full = true;
+      for (const x of qt) { const hit = x.ids.find(v => dset.has(v)); if (hit !== undefined) inter += Math.min(x.w, I.idf[hit]) * x.f; if (hit === undefined || x.f !== 1) full = false; }
+      return [d, inter / Math.max(1e-9, wq + wd - inter), opts.contain && full];
+    }).sort((x, y) => (y[2] - x[2]) || (y[1] - x[1])).slice(0, DICE_TOP);   // contain: tên chứa đủ token lõi xếp trước khi cắt
+    const scored = wjOf.map(([d, wj, full]) => {
       const core = []; for (let p = I.docOff[d]; p < I.docOff[d + 1]; p++) core.push(I.vtok[I.docTok[p]]);
       let s = 0.55 * wj + 0.45 * dice(qb, bigrams(core.join(' ')));
       const fq = a.forms & MAIN, fd = I.forms[d] & MAIN;
@@ -196,6 +202,7 @@
       const br = (I.forms[d] & F.CN) || isBranchMst(I.mst[d]);
       if (br && !(a.forms & F.CN)) s -= 0.06;
       if (!br && (a.forms & F.CN)) s -= 0.03;
+      if (full) s += 0.25;
       return { mst: I.mst[d], name: I.name[d], score: Math.max(0, Math.min(1, s)), branch: !!br };
     }).sort((x, y) => y.score - x.score || (x.branch - y.branch));
     const top = scored.slice(0, k);

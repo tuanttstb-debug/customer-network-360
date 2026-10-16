@@ -48,7 +48,7 @@
       try {
         const r = await khFind(q, 'Nạp ① (tìm)', m => { $('npKhRes').innerHTML = `<span class="muted">${esc(m)}</span>`; });
         if (r === null) { $('npKhRes').innerHTML = '<span class="muted">Chưa có chỉ mục nội bộ (Admin tải lên ở Danh mục → MST nội bộ).</span>'; return; }
-        $('npKhRes').innerHTML = r.length ? `<div class="tblwrap"><table class="tbl" id="npKhTbl"><thead><tr><th>CIF</th><th>Tên KH</th><th>MST</th><th>CN</th><th></th></tr></thead><tbody>${r.map((k, i) => `<tr><td class="code">${esc(k.cif)}</td><td>${esc(k.ten)}</td><td class="code">${esc(k.mst || '—')}</td><td>${esc(k.cn)}</td><td><button class="btn sm" data-i="${i}">Chọn</button></td></tr>`).join('')}</tbody></table></div>${r.length >= 20 ? '<span class="muted">Chỉ hiện 20 KH đầu — gõ cụ thể hơn.</span>' : ''}` : '<span class="muted">Không thấy KH nào trong KH line CB.</span>';
+        $('npKhRes').innerHTML = r.length ? `<div class="tblwrap"><table class="tbl" id="npKhTbl"><thead><tr><th>CIF</th><th>Tên KH</th><th>MST</th><th>CN</th><th>Khớp theo</th><th></th></tr></thead><tbody>${r.map((k, i) => `<tr><td class="code">${esc(k.cif)}</td><td>${esc(k.ten)}${k.tenHT && k.tenHT !== k.ten ? '<br><small class="muted">' + esc(k.tenHT) + '</small>' : ''}</td><td class="code">${esc(k.mst || '—')}</td><td>${esc(k.cn)}</td><td>${viaChip(k)}</td><td><button class="btn sm" data-i="${i}">Chọn</button></td></tr>`).join('')}</tbody></table></div>${r.length >= 20 ? '<span class="muted">Chỉ hiện 20 KH đầu — gõ cụ thể hơn.</span>' : ''}` : '<span class="muted">Không thấy KH nào trong KH line CB.</span>';
         $('npKhRes').querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { applyKh(r[+b.dataset.i], true); $('npKhRes').innerHTML = `<span class="muted">Đã chọn ${esc(r[+b.dataset.i].cif)} — ${esc(r[+b.dataset.i].ten)}.</span>`; });
       } catch (e) { $('npKhRes').innerHTML = `<span class="muted">${esc(e.message)}</span>`; } finally { $('npKhGo').disabled = false; }
     };
@@ -60,18 +60,11 @@
   }
   /* Tra KHHH trong dữ liệu nội bộ (KH line CB — CIF chỉ GAS đọc). CIF/MST → server; TÊN → chỉ mục tên→MST trên máy
    * (tên đẹp sheet 900k) rồi hỏi server MST nào là KH TPBank. → null nếu chưa có chỉ mục. */
+  const viaChip = k => (k.via === 'ten-TPB' ? chip('Tên KH TPBank', 'ok') : k.via === 'MST-900k' ? chip('Tên 900k → MST', 'gray') : '');
   const digitsOnly = q => { const d = String(q || '').replace(/[\s.\-]/g, ''); return /^\d{3,}$/.test(d) ? d : ''; };
   async function khFind(q, context, onStatus) {
     if (digitsOnly(q)) { const r = await CN.net.call('kh-find', { q, context }, { timeoutMs: 90000 }); return r.version ? (r.items || []) : null; }
-    const off = onStatus ? CN.mstidx.on(st => onStatus(st.msg)) : null;
-    try {
-      const res = await CN.mstidx.search([q], null, context, 15);
-      if (res === null) return null;
-      const msts = res[0].cands.map(c => c.mst);
-      if (!msts.length) return [];
-      const r = await CN.net.call('kh-find', { msts, context }, { timeoutMs: 90000 });
-      return r.items || [];
-    } finally { if (off) off(); }
+    return (await CN.mstidx.findKh(q, context, onStatus)).items;   // tên: KH line CB trước → 900k (MST) sau
   }
   /** Điền ô từ KH nội bộ. Dữ liệu TPB là chuẩn → ghi đè (server cũng chuẩn hóa lại khi lưu). */
   function applyKh(k) {
