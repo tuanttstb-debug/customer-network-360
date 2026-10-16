@@ -294,7 +294,7 @@ try {
     const t1 = await text(pM, '#mstTbl tbody tr');
     ok(/0101234567/.test(t1) && /CIF 77700001/.test(t1), 'tra thử (viết tắt, không dấu) → ứng viên 1 đúng MST + chip CIF (CIF tra ở server)');
     await pM.$eval('#mstQ', e => { e.value = ''; }); await pM.type('#mstQ', 'mat troi gia lap'); await pM.click('#mstGo');
-    await pM.waitForSelector('#mstKhTbl', { timeout: 60000 });
+    await pM.waitForFunction(() => /77700003/.test((document.getElementById('mstKhTbl') || {}).innerText || '') && !document.getElementById('mstGo').disabled, { timeout: 60000 }).catch(() => {});   // bảng của lượt tra trước cũng có id này
     const t3 = await text(pM, '#mstKhTbl tbody');
     ok(/77700003/.test(t3) && /CTY CPDT VA PTNL MAT TROI GIA LAP/.test(t3) && /Tên KH TPBank/.test(t3), 'tra thử tên viết tắt hệ thống TPB (không có trong 900k) → KH TPBank CIF 77700003 hiện ở bảng ① (tìm TPBank trước)');
     ok(await pM.evaluate(async () => (await indexedDB.databases()).some(d => d.name === 'cn360_mst')), 'chỉ mục tên→MST lưu IndexedDB của máy này (ngoại lệ A4 có chủ đích)');

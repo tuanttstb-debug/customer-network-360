@@ -17,6 +17,6 @@ let t0 = Date.now();
 const I = MSTM.build(MSTM.parseTsv(gun('name_index.tsv.gz')));
 console.log('dựng chỉ mục', I.N, 'tên trong', Date.now() - t0, 'ms');
 t0 = Date.now();
-const r = MSTM.search(I, q, 15);
+const r = MSTM.search(I, q, 15, { contain: true });
 console.log('đường hiện tại (top 15, ' + (Date.now() - t0) + ' ms):');
 r.cands.forEach(c => console.log('  ', c.score.toFixed(2), c.mst, mst2cif.has(c.mst) ? 'KH TPB ' + mst2cif.get(c.mst) : '-', c.name));

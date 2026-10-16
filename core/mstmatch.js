@@ -177,12 +177,14 @@
     if (cand.length > MAX_CAND) {
       // Chấm sơ bộ bằng MỌI token (kể cả token phổ biến bị bỏ khi lấy ứng viên) rồi mới cắt — tránh cắt ngẫu nhiên khi nhiều ứng viên đồng điểm
       const qIds = new Map(); qt.forEach(x => x.ids.forEach(v => qIds.set(v, x.w * x.f)));
+      const nq = qt.filter(x => x.f === 1).length;
       const pre = cand.map(d => {
-        let s = 0, wd = 0;
-        for (let p = I.docOff[d]; p < I.docOff[d + 1]; p++) { const v = I.docTok[p], w = qIds.get(v); wd += I.idf[v]; if (w !== undefined) s += w; }
-        return [d, s / Math.max(1e-9, wd + 1)];
+        let s = 0, wd = 0, hit = 0;
+        for (let p = I.docOff[d]; p < I.docOff[d + 1]; p++) { const v = I.docTok[p], w = qIds.get(v); wd += I.idf[v]; if (w !== undefined) { s += w; hit++; } }
+        return [d, s / Math.max(1e-9, wd + 1), opts.contain && hit >= nq && nq === qt.length];
       });
-      cand = pre.sort((x, y) => y[1] - x[1]).slice(0, MAX_CAND).map(x => x[0]);
+      // contain: tên dài chứa đủ token (vd "CTY CPDT VA PTNL MAT TROI BACH KHOA") không bị cắt vì tỷ lệ phủ thấp
+      cand = pre.sort((x, y) => (y[2] - x[2]) || (y[1] - x[1])).slice(0, MAX_CAND).map(x => x[0]);
     }
     const qb = bigrams(a.core), wq = qt.reduce((s, x) => s + x.w, 0);
     // Vòng 1: Jaccard có trọng số cho mọi ứng viên → giữ DICE_TOP · Vòng 2: + Dice 2-ký-tự trên tên lõi (dựng lại từ token, không chuẩn hóa lại tên)
