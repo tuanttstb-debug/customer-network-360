@@ -115,7 +115,7 @@ function apiMstCif_(u, body) {
   if (msts.length > MST_CIF_MAX) throw new Error('Tối đa ' + MST_CIF_MAX + ' MST mỗi lần tra.');
   var r = cifLookup_(msts);
   if (r === null) return { version: null, map: {} };
-  withLock_(function () { log_(u, 'Tra CIF nội bộ', str_(body.context).slice(0, 80), msts.length + ' MST · ' + Object.keys(r).length + ' có CIF'); });
+  log_(u, 'Tra CIF nội bộ', str_(body.context).slice(0, 80), msts.length + ' MST · ' + Object.keys(r).length + ' có CIF');   // appendRow nguyên tử — không chờ khóa ghi
   return { version: mstManifest_().version, map: r };
 }
 
@@ -198,7 +198,7 @@ function apiKhFind_(u, body) {
     what = raw.slice(0, 20);
   }
   items = items.slice(0, KH_FIND_MAX);
-  withLock_(function () { log_(u, 'Tìm KHHH nội bộ', str_(body.context).slice(0, 80), what + ' → ' + items.length + ' KH'); });
+  log_(u, 'Tìm KHHH nội bộ', str_(body.context).slice(0, 80), what + ' → ' + items.length + ' KH');   // appendRow nguyên tử — không chờ khóa ghi
   return { version: m.version, items: items, src: _khSrc_ };
 }
 /** {CIF: KH chuẩn} cho các CIF — dùng khi lưu lô / chuẩn hóa KHHH. null nếu chưa có chỉ mục. */

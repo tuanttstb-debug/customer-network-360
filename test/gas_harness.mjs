@@ -28,6 +28,7 @@ class Sheet {
   getName() { return this.name; }
   _trim() { while (this.data.length && this.data[this.data.length - 1].every(x => x === '' || x === undefined || x === null)) this.data.pop(); }
   getLastRow() { this._trim(); return this.data.length; }
+  appendRow(r) { this._trim(); this.data.push(r.slice()); return this; }
   getLastColumn() { return this.data.reduce((m, r) => { let n = r.length; while (n && (r[n - 1] === '' || r[n - 1] === undefined)) n--; return Math.max(m, n); }, 0); }
   getMaxRows() { return 1000; }
   getDataRange() { const nr = Math.max(1, this.getLastRow()), nc = Math.max(1, this.getLastColumn()); return new Range(this, 1, 1, nr, nc); }

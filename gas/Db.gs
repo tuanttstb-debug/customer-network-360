@@ -91,7 +91,10 @@ function padDt_(n) { return 'DT' + ('00000' + n).slice(-5); }
 function str_(v) { return v === null || v === undefined ? '' : String(v).trim(); }
 function num_(v) { var x = +v; return isFinite(x) ? x : 0; }
 
+// Chỉ đọc dòng tiêu đề + appendRow (nguyên tử, không cần khóa) — KHÔNG đọc cả sheet nhật ký mỗi lần ghi (nhật ký dài dần → mọi thao tác chậm dần; 16/10)
 function log_(u, action, target, detail) {
-  appendRows_('NhatKy', [{ 'Thời điểm': nowIso_(), 'Người': u.username, 'Vai trò': u.role, 'Team': u.team,
-    'Hành động': action, 'Đối tượng': str_(target).slice(0, 200), 'Chi tiết': str_(detail).slice(0, 500) }]);
+  var sh = sheet_('NhatKy'), H = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+  sh.appendRow(_toRow_(H, { 'Thời điểm': nowIso_(), 'Người': u.username, 'Vai trò': u.role, 'Team': u.team,
+    'Hành động': action, 'Đối tượng': str_(target).slice(0, 200), 'Chi tiết': str_(detail).slice(0, 500) }));
+  delete _tblCache_['NhatKy'];
 }
