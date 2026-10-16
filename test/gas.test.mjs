@@ -142,8 +142,16 @@ ok(call({ action: 'log', token: T.u_mb, what: 'Xuất Excel', scope: 'all' }).er
 ok(call({ action: 'log', token: T.u_mb, what: 'Xem KHHH', target: '900001' }).data.ok, 'ghi nhật ký xem KHHH');
 ok(call({ action: 'log', token: T.u_mb, what: 'Xóa sạch' }).status === 'error', 'hành động nhật ký lạ → từ chối');
 ok(call({ action: 'audit', token: T.tl_mn }).error === 'FORBIDDEN' && call({ action: 'audit', token: T.admin1 }).data.rows.length > 5, 'nhật ký: chỉ Admin xem');
+const lot2 = new Set(db().table('Lo').filter(l => l['CIF'] === '900002').map(l => l['Batch_ID']));
+const usedElse = new Set(db().table('CongNo').filter(c => !lot2.has(c['Batch_ID'])).map(c => c['Counterparty_ID']));
+const own = db().table('DoiTac').filter(d => lot2.has(d['Lô tạo'])).map(d => d['Counterparty_ID']);
+const orphan = own.filter(id => !usedElse.has(id)), shared = own.filter(id => usedElse.has(id));
 r = call({ action: 'delete-khhh', token: T.admin1, cif: '900002' });
 ok(r.data.lots === 1 && !db().table('KHHH').some(k => k['CIF'] === '900002') && !db().table('Lo').some(l => l['CIF'] === '900002'), 'Admin xóa toàn bộ dữ liệu 1 KHHH');
+const dtLeft = new Set(db().table('DoiTac').map(d => d['Counterparty_ID']));
+ok(orphan.length > 0 && r.data.doiTac === orphan.length && orphan.every(id => !dtLeft.has(id)) && !db().table('TenGop').some(g => orphan.includes(g['Counterparty_ID'])),
+  'xóa KHHH → xóa kèm ' + orphan.length + ' đối tác chỉ lô đó tạo + tên gộp của chúng');
+ok(shared.every(id => dtLeft.has(id)), 'đối tác lô đó tạo nhưng KHHH khác còn dùng → giữ (' + shared.length + ')');
 
 console.log('— Nhập kho v0.1 (DB trống)');
 const E2 = makeEnv({ users: USERS, props: { AUTH_SECRET: SECRET } }); E2.ctx.setupAll();

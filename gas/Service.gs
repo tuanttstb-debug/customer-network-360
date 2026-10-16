@@ -296,11 +296,22 @@ function apiDeleteKhhh_(u, body) {
     var cif = str_(body.cif);
     var lots = rows_('Lo'), ids = {};
     lots.forEach(function (l) { if (str_(l['CIF']) === cif) ids[str_(l['Batch_ID'])] = true; });
-    writeTable_('CongNo', rows_('CongNo').filter(function (r) { return !ids[str_(r['Batch_ID'])]; }));
+    var cn = rows_('CongNo').filter(function (r) { return !ids[str_(r['Batch_ID'])]; });
+    writeTable_('CongNo', cn);
     writeTable_('Lo', lots.filter(function (l) { return !ids[str_(l['Batch_ID'])]; }));
     writeTable_('KHHH', rows_('KHHH').filter(function (k) { return str_(k['CIF']) !== cif; }));
-    log_(u, 'Xóa dữ liệu KHHH', cif, Object.keys(ids).length + ' lô');
-    return { lots: Object.keys(ids).length };
+    // Đối tác do chính các lô này tạo mà không còn dòng công nợ nào dùng → xóa kèm tên gộp + yêu cầu sửa của nó (16/10)
+    var used = {}; cn.forEach(function (r) { used[str_(r['Counterparty_ID'])] = true; });
+    var gone = {}, dts = rows_('DoiTac');
+    dts.forEach(function (d) { var id = str_(d['Counterparty_ID']); if (ids[str_(d['Lô tạo'])] && !used[id]) gone[id] = true; });
+    var nDt = Object.keys(gone).length;
+    if (nDt) {
+      writeTable_('DoiTac', dts.filter(function (d) { return !gone[str_(d['Counterparty_ID'])]; }));
+      writeTable_('TenGop', rows_('TenGop').filter(function (g) { return !gone[str_(g['Counterparty_ID'])]; }));
+      writeTable_('YeuCau', rows_('YeuCau').filter(function (y) { return !gone[str_(y['Counterparty_ID'])]; }));
+    }
+    log_(u, 'Xóa dữ liệu KHHH', cif, Object.keys(ids).length + ' lô · ' + nDt + ' đối tác chỉ lô này dùng');
+    return { lots: Object.keys(ids).length, doiTac: nDt };
   });
 }
 
