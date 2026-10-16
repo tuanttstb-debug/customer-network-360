@@ -7,10 +7,91 @@
     ['Benchmark quy mô quan hệ', 'num'], ['Benchmark BL còn hiệu lực', 'num'], ['Ngưỡng Opportunity P1', 'num'], ['Ngưỡng Opportunity P2', 'num'], ['Benchmark quy mô cơ hội', 'num'], ['Ngưỡng gợi ý gộp tên', 'num']];
   const act = async (action, payload, msg, after) => { try { CN.ui.busy(true, 'Đang lưu…'); const r = await CN.net.write(action, payload, { timeoutMs: 120000 }); CN.ui.toast(msg(r), 'ok'); await CN.refresh(true); if (after) after(r); } catch (e) { CN.ui.toast(e.message, 'err'); } finally { CN.ui.busy(false); } };
 
+  /* ---- MST nội bộ TPBank (CN.mstidx · gas/Mst.gs) ---- */
+  const PART = 3 * 1024 * 1024;
+  const toB64 = u8 => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+  const sha = async u8 => [...new Uint8Array(await crypto.subtle.digest('SHA-256', u8))].map(b => b.toString(16).padStart(2, '0')).join('');
+  function mstTab(box, admin) {
+    box.innerHTML = `<div class="card"><h2>Chỉ mục MST nội bộ TPBank</h2>
+      <p class="muted small">Tra MST theo tên trong file nội bộ TPBank <b>trước</b> khi dùng công cụ ngoài (bước ③ Nạp dữ liệu tự tra; trang Đối tác có nút "Tìm MST (nội bộ)").
+      Chỉ mục tên → MST tải về máy này 1 lần cho mỗi phiên bản (không chứa CIF); CIF chỉ máy chủ tra và ghi nhật ký. <b>Dữ liệu nội bộ TPBank — không chụp/chia sẻ ra ngoài.</b></p>
+      <div id="mstMeta" class="muted small">Đang tải…</div>
+      <div class="row" style="margin-top:10px"><input id="mstQ" placeholder="Gõ tên doanh nghiệp để tra thử…" style="flex:1;min-width:240px"><button class="btn pri" id="mstGo">Tra</button><button class="btn" id="mstClr" title="Xóa bản chỉ mục đã tải trên máy này (lần tra sau tải lại)">Xóa khỏi máy này</button></div>
+      <div id="mstSt" class="muted small"></div><div id="mstRes"></div></div>
+      ${admin ? `<div class="card"><h2>Admin — tải chỉ mục lên / gỡ</h2><ol class="small"><li>Trên máy có file nội bộ: <code>python tools/build_mst_index.py "…\\TRA CUU MST.xlsx"</code> → thư mục <code>_build\\&lt;phiên bản&gt;</code> (ngoài repo).</li>
+        <li>Chọn cùng lúc 3 tệp trong thư mục đó: <code>manifest.json</code> · <code>name_index.tsv.gz</code> · <code>cif_map.tsv.gz</code> → Tải lên (thay phiên bản cũ).</li></ol>
+        <div class="row"><input type="file" id="mstFiles" multiple accept=".json,.gz"><button class="btn pri" id="mstUp" disabled>Tải lên</button><button class="btn danger" id="mstRm">Gỡ chỉ mục</button></div><div id="mstUpSt" class="small"></div></div>` : ''}`;
+    const meta = () => CN.net.call('mst-meta').then(m => {
+      if (!$('mstMeta')) return;
+      const st = CN.mstidx.state;
+      $('mstMeta').innerHTML = !m.version ? '<div class="alert warn">Chưa có chỉ mục trên máy chủ' + (admin ? ' — tải lên ở khung Admin bên dưới.' : ' — báo Admin.') + '</div>'
+        : `<div class="kv"><b>Phiên bản</b><span class="code">${esc(m.version)}</span><b>Pháp nhân (tên → MST)</b><span>${fmt(m.counts.names)}</span><b>MST có CIF (chỉ máy chủ)</b><span>${fmt(m.counts.cif)}</span>
+          <b>Dựng lúc</b><span>${esc(m.builtAt || '')}</span><b>Tải lên</b><span>${CN.ui.dt(m.uploadedAt)}${m.uploadedBy ? ' · ' + esc(m.uploadedBy) : ''}</span><b>Trên máy này</b><span>${esc(st.version === m.version ? st.msg : 'chưa tải (tải khi tra lần đầu, ~' + Math.round(m.name.bytes / 1e6) + ' MB)')}</span></div>`;
+    }).catch(e => { if ($('mstMeta')) $('mstMeta').innerHTML = `<div class="alert err">${esc(e.message)}</div>`; });
+    meta();
+    const go = async () => {
+      const q = $('mstQ').value.trim(); if (!q) return;
+      const off = CN.mstidx.on(st => { if ($('mstSt')) $('mstSt').textContent = st.msg; });
+      try {
+        $('mstGo').disabled = true;
+        const res = await CN.mstidx.search([q], null, 'Danh mục (tra thử)');
+        if (res === null) { $('mstSt').textContent = CN.mstidx.state.msg; return; }
+        const cs = res[0].cands, cif = cs.length ? (await CN.mstidx.cif(cs.map(c => c.mst), 'Danh mục (tra thử)')).map : {};
+        $('mstSt').textContent = cs.length ? (res[0].auto ? 'Ứng viên 1 đủ chắc để máy tự điền (≥ 86% và cách ứng viên 2 ≥ 10 điểm).' : 'Chưa đủ chắc để tự điền — người chọn.') : 'Không có ứng viên.';
+        $('mstRes').innerHTML = cs.length ? `<div class="tblwrap"><table class="tbl" id="mstTbl"><thead><tr><th>MST</th><th>Tên</th><th>Điểm khớp</th><th>KH TPBank</th></tr></thead><tbody>${cs.map(c => `<tr><td class="code">${esc(c.mst)}${c.branch ? ' ' + chip('chi nhánh', 'gray') : ''}</td><td>${esc(c.name)}</td><td>${Math.round(100 * c.score)}%</td><td>${cif[c.mst] ? chip('CIF ' + cif[c.mst].cif + (cif[c.mst].via === 'cty-me' ? ' (cty mẹ)' : ''), 'ok') : '—'}</td></tr>`).join('')}</tbody></table></div>` : '';
+        meta();
+      } catch (e) { $('mstSt').textContent = e.message; } finally { off(); if ($('mstGo')) $('mstGo').disabled = false; }
+    };
+    $('mstGo').onclick = go; $('mstQ').onkeydown = e => { if (e.key === 'Enter') go(); };
+    $('mstClr').onclick = () => { CN.mstidx.clear(); CN.ui.toast('Đã xóa chỉ mục MST khỏi máy này', 'ok'); meta(); };
+    if (!admin) return;
+    let F = null;
+    $('mstFiles').onchange = async e => {
+      F = null; $('mstUp').disabled = true;
+      try {
+        const fs = [...e.target.files], by = n => fs.find(f => f.name === n);
+        if (!by('manifest.json') || !by('name_index.tsv.gz') || !by('cif_map.tsv.gz')) throw new Error('Chọn đủ 3 tệp: manifest.json · name_index.tsv.gz · cif_map.tsv.gz');
+        const man = JSON.parse(await by('manifest.json').text());
+        const name = new Uint8Array(await by('name_index.tsv.gz').arrayBuffer()), cif = new Uint8Array(await by('cif_map.tsv.gz').arrayBuffer());
+        if (name.length !== man.files.name.bytes || await sha(name) !== man.files.name.sha256) throw new Error('name_index.tsv.gz không khớp manifest.json (khác lần build?)');
+        if (cif.length !== man.files.cif.bytes || await sha(cif) !== man.files.cif.sha256) throw new Error('cif_map.tsv.gz không khớp manifest.json');
+        F = { man, name, cif };
+        $('mstUpSt').innerHTML = `<div class="alert ok">Bản ${esc(man.version)}: ${fmt(man.counts.names)} pháp nhân · ${fmt(man.counts.cif)} MST có CIF · ${Math.ceil(name.length / PART)} mảnh.</div>`;
+        $('mstUp').disabled = false;
+      } catch (err) { $('mstUpSt').innerHTML = `<div class="alert err">${esc(err.message)}</div>`; }
+    };
+    $('mstUp').onclick = async () => {
+      if (!F) return;
+      const r = await CN.ui.ask('Tải chỉ mục MST nội bộ lên?', `<p>Phiên bản <b>${esc(F.man.version)}</b> thay phiên bản hiện có. Mọi người dùng sẽ tải bản mới ở lần tra kế tiếp. Thao tác được ghi nhật ký.</p>`, { yes: 'Tải lên' });
+      if (!r.ok) return;
+      $('mstUp').disabled = true;
+      const v = F.man.version, n = Math.ceil(F.name.length / PART), st = m => { $('mstUpSt').innerHTML = `<div class="alert info">${esc(m)}</div>`; };
+      try {
+        for (let i = 0; i < n; i++) {
+          st(`Đang tải mảnh ${i + 1}/${n}…`);
+          const part = F.name.subarray(i * PART, (i + 1) * PART);
+          await CN.net.write('mst-upload', { version: v, kind: 'name', i, b64: toB64(part), sha256: await sha(part) }, { timeoutMs: 180000 });
+        }
+        st('Đang tải bảng CIF…');
+        await CN.net.write('mst-upload', { version: v, kind: 'cif', b64: toB64(F.cif) }, { timeoutMs: 180000 });
+        st('Đang chốt phiên bản…');
+        const out = await CN.net.write('mst-upload', { version: v, kind: 'manifest', parts: n, manifest: F.man }, { timeoutMs: 180000 });
+        CN.mstidx.clear();
+        $('mstUpSt').innerHTML = `<div class="alert ok">Đã tải lên bản ${esc(out.version)} (${out.name.parts} mảnh, ${fmt(out.name.bytes)} byte).</div>`;
+        meta();
+      } catch (e) { $('mstUpSt').innerHTML = `<div class="alert err">${esc(e.message)} — chọn lại tệp và tải lên lại.</div>`; $('mstUp').disabled = false; }
+    };
+    $('mstRm').onclick = async () => {
+      const r = await CN.ui.ask('Gỡ chỉ mục MST nội bộ?', '<p>Xóa toàn bộ file chỉ mục trên Drive. Mọi người hết tra nội bộ (CIF đã điền trong danh mục đối tác giữ nguyên). Dùng khi có cảnh báo bảo mật.</p>', { yes: 'Gỡ', danger: true });
+      if (!r.ok) return;
+      try { const x = await CN.net.write('mst-remove', {}); CN.mstidx.clear(); CN.ui.toast('Đã gỡ ' + x.removed + ' file chỉ mục', 'ok'); meta(); } catch (e) { CN.ui.toast(e.message, 'err'); }
+    };
+  }
+
   CN.views.danhmuc = {
     render(host) {
       const S = CN.store.S, admin = CN.store.isAdmin(), cfg = S.data.config;
-      const T = [['ts', 'Tham số mô hình'], ['tp', 'KH TPBank (' + S.data.khTP.length + ')'], ['tg', 'Tên gộp (' + S.data.tenGop.length + ')'], ['xuat', 'Xuất dữ liệu']].concat(admin ? [['kho', 'Nhập kho v0.1'], ['nk', 'Nhật ký truy cập']] : []);
+      const T = [['ts', 'Tham số mô hình'], ['tp', 'KH TPBank (' + S.data.khTP.length + ')'], ['mst', 'MST nội bộ'], ['tg', 'Tên gộp (' + S.data.tenGop.length + ')'], ['xuat', 'Xuất dữ liệu']].concat(admin ? [['kho', 'Nhập kho v0.1'], ['nk', 'Nhật ký truy cập']] : []);
       host.innerHTML = `<div class="tabs">${T.map(([k, t], i) => `<button class="tab ${i ? '' : 'on'}" data-t="${k}">${esc(t)}</button>`).join('')}</div><div id="dmBox"></div>`;
       const tabs = host.querySelectorAll('.tab');
       const show = t => {
@@ -37,6 +118,8 @@
             $('tpFile').onchange = async e => { try { rows = await CN.xlsx.readKhTP(e.target.files[0]); $('tpUp').disabled = !rows.length; CN.ui.toast('Đọc được ' + rows.length + ' dòng'); } catch (err) { CN.ui.toast(err.message, 'err'); } };
             $('tpUp').onclick = async () => { const r = await CN.ui.ask('Thay danh mục KH TPBank?', `<p>Thay ${S.data.khTP.length} dòng hiện có bằng <b>${rows.length}</b> dòng từ file.</p>`, { yes: 'Thay' }); if (r.ok) act('set-khtp', { rows }, x => 'Đã lưu ' + x.n + ' dòng'); };
           }
+        } else if (t === 'mst') {
+          mstTab(box, admin);
         } else if (t === 'tg') {
           box.innerHTML = '<div class="card"><h2>Tên gốc → mã đối tác</h2><p class="muted small">Tên trên báo cáo đã gộp về mã đối tác (máy gộp hoặc người duyệt). Lần nạp sau máy dùng bảng này trước.</p><div id="tgList"></div></div>';
           table($('tgList'), S.data.tenGop.map(a => Object.assign({ ten: (CN.store.dtById(a.id) || {}).ten || '' }, a)), [

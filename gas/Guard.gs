@@ -17,6 +17,7 @@ function enforcePrivate_() {
 
 function guardDaily() {
   var r = enforcePrivate_();
+  try { var m = enforceMstPrivate_(); if (m.removed.length) r.removed = (r.removed || []).concat(m.removed); } catch (e) { /* chưa có thư mục chỉ mục MST */ }
   if (r.removed && r.removed.length) {
     withLock_(function () { log_({ username: 'GUARD', role: 'Hệ thống', team: '' }, 'CẢNH BÁO chia sẻ — đã gỡ', 'CN360_DB', r.removed.join(', ')); });
   }

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -57,6 +58,24 @@ export function makeEnv({ users = [], props = {}, owner = 'owner@gmail.com' } = 
   const Access = { PRIVATE: 'PRIVATE', ANYONE_WITH_LINK: 'ANYONE_WITH_LINK', DOMAIN: 'DOMAIN' }, Permission = { NONE: 'NONE', VIEW: 'VIEW', EDIT: 'EDIT' };
   const fileOf = id => { if (!files.has(id)) files.set(id, { access: Access.PRIVATE, editors: [owner], viewers: [], shareable: true }); return files.get(id); };
   const person = e => ({ getEmail: () => e });
+  // Drive giả: thư mục + file (blob) — đủ cho Mst.gs
+  const folders = new Map(), blobs = new Map();
+  const mkBlob = (buf, type, name) => { const b = { _buf: buf, _type: type || '', _name: name || '',
+    getBytes: () => toSigned(b._buf), getDataAsString: () => b._buf.toString('utf8'), getContentType: () => b._type, getName: () => b._name, setName: n => { b._name = n; return b; } }; return b; };
+  const driveItem = id => { const f = fileOf(id); return {
+    getId: () => id, getName: () => (blobs.get(id) || {}).name || '', getSize: () => ((blobs.get(id) || {}).buf || Buffer.alloc(0)).length,
+    getBlob: () => mkBlob(blobs.get(id).buf, '', blobs.get(id).name), setTrashed: t => { if (t) { f.trashed = true; folders.forEach(fd => { fd.files = fd.files.filter(x => x !== id); }); } },
+    getOwner: () => person(owner), getSharingAccess: () => f.access, setSharing: (a) => { f.access = a; },
+    getEditors: () => f.editors.map(person), getViewers: () => f.viewers.map(person),
+    removeEditor: p => { f.editors = f.editors.filter(e => e !== p.getEmail()); }, removeViewer: p => { f.viewers = f.viewers.filter(e => e !== p.getEmail()); },
+    setShareableByEditors: b => { f.shareable = b; } }; };
+  const iter = ids => { let i = 0; return { hasNext: () => i < ids.length, next: () => driveItem(ids[i++]) }; };
+  const folderObj = id => Object.assign(driveItem(id), {
+    getName: () => folders.get(id).name,
+    createFile: blob => { const fid = 'F' + (nId++); blobs.set(fid, { name: blob.getName(), buf: blob._buf }); fileOf(fid); folders.get(id).files.push(fid); return driveItem(fid); },
+    getFiles: () => iter(folders.get(id).files.slice()),
+    getFilesByName: n => iter(folders.get(id).files.filter(f => blobs.get(f).name === n)),
+  });
 
   const ctx = {
     console,
@@ -66,25 +85,26 @@ export function makeEnv({ users = [], props = {}, owner = 'owner@gmail.com' } = 
       flush: () => {},
     },
     LockService: { getScriptLock: () => ({ waitLock: () => { lockDepth++; if (lockDepth > 1) throw new Error('lock lồng nhau'); }, releaseLock: () => { lockDepth--; } }) },
-    CacheService: { getScriptCache: () => ({ get: k => (cacheStore.has(k) ? cacheStore.get(k) : null), put: (k, v) => cacheStore.set(k, v), remove: k => cacheStore.delete(k) }) },
+    CacheService: { getScriptCache: () => ({ get: k => (cacheStore.has(k) ? cacheStore.get(k) : null), put: (k, v) => cacheStore.set(k, v), remove: k => cacheStore.delete(k),
+      getAll: ks => Object.fromEntries(ks.filter(k => cacheStore.has(k)).map(k => [k, cacheStore.get(k)])),
+      putAll: o => { Object.entries(o).forEach(([k, v]) => { if (String(v).length > 100000) throw new Error('cache value > 100KB'); cacheStore.set(k, v); }); } }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in P ? P[k] : null), setProperty: (k, v) => { P[k] = String(v); } }) },
     Utilities: {
       DigestAlgorithm: { SHA_256: 'sha256' }, Charset: { UTF_8: 'utf8' },
-      computeDigest: (alg, s) => toSigned(crypto.createHash(alg).update(String(s), 'utf8').digest()),
+      computeDigest: (alg, s) => toSigned(crypto.createHash(alg).update(Array.isArray(s) ? fromBytes(s) : Buffer.from(String(s), 'utf8')).digest()),
       computeHmacSha256Signature: (v, key) => toSigned(crypto.createHmac('sha256', String(key)).update(String(v), 'utf8').digest()),
       base64Encode: s => Buffer.from(typeof s === 'string' ? s : fromBytes(s)).toString('base64'),
       base64Decode: s => toSigned(Buffer.from(String(s), 'base64')),
-      newBlob: bytes => ({ getDataAsString: () => fromBytes(bytes).toString('utf8') }),
+      newBlob: (data, type, name) => mkBlob(typeof data === 'string' ? Buffer.from(data, 'utf8') : fromBytes(data), type, name),
+      ungzip: b => mkBlob(zlib.gunzipSync(b._buf), 'application/octet-stream'),
       formatDate: (d, tz, f) => { const x = new Date(d.getTime() + 7 * 3600e3); const s = x.toISOString(); return f === 'yyyy-MM-dd' ? s.slice(0, 10) : s; },
     },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ s, setMimeType() { return this; }, getContent() { return s; } }) },
     DriveApp: {
       Access, Permission,
-      getFileById: id => { const f = fileOf(id); return {
-        getOwner: () => person(owner), getSharingAccess: () => f.access, setSharing: (a) => { f.access = a; },
-        getEditors: () => f.editors.map(person), getViewers: () => f.viewers.map(person),
-        removeEditor: p => { f.editors = f.editors.filter(e => e !== p.getEmail()); }, removeViewer: p => { f.viewers = f.viewers.filter(e => e !== p.getEmail()); },
-        setShareableByEditors: b => { f.shareable = b; } }; },
+      getFileById: id => driveItem(id),
+      getFolderById: id => { if (!folders.has(id)) throw new Error('Không thấy thư mục ' + id); return folderObj(id); },
+      createFolder: name => { const id = 'FD' + (nId++); folders.set(id, { name, files: [] }); fileOf(id); return folderObj(id); },
     },
     ScriptApp: { getProjectTriggers: () => triggers.slice(), deleteTrigger: t => { triggers.splice(triggers.indexOf(t), 1); },
       newTrigger: fn => { const t = { getHandlerFunction: () => fn }; const chain = { timeBased: () => chain, everyDays: () => chain, atHour: () => chain, create: () => { triggers.push(t); return t; } }; return chain; } },
@@ -94,11 +114,11 @@ export function makeEnv({ users = [], props = {}, owner = 'owner@gmail.com' } = 
   ctx.globalThis = ctx;
   vm.createContext(ctx);
   const dir = path.join(ROOT, 'gas');
-  const order = ['Mapping.gs', 'Config.gs', 'Auth.gs', 'Db.gs', 'Service.gs', 'Guard.gs', 'Setup.gs', 'Code.gs'];
+  const order = ['Mapping.gs', 'Config.gs', 'Auth.gs', 'Db.gs', 'Service.gs', 'Mst.gs', 'Guard.gs', 'Setup.gs', 'Code.gs'];
   const all = fs.readdirSync(dir).filter(f => f.endsWith('.gs'));
   for (const f of all) if (!order.includes(f)) order.push(f);
   for (const f of order) vm.runInContext(fs.readFileSync(path.join(dir, f), 'utf8'), ctx, { filename: f });
   // Mỗi request = 1 lần chạy GAS mới → xóa cache bảng trong bộ nhớ (giống thực tế)
   const call = body => { vm.runInContext('_tblCache_ = {};', ctx); return JSON.parse(JSON.stringify(ctx.handle_(JSON.parse(JSON.stringify(body))))); };
-  return { ctx, call, books, files, fileOf, props: P, triggers, logs, userBook, db: () => books.get(P.DB_ID), cacheStore, owner };
+  return { ctx, call, books, files, fileOf, folders, blobs, props: P, triggers, logs, userBook, db: () => books.get(P.DB_ID), cacheStore, owner };
 }

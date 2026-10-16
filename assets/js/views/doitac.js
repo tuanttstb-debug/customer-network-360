@@ -13,7 +13,13 @@
       return { d, id: d.id, ten: d.ten, mst: d.mst, n: es.length, thu: es.reduce((s, e) => s + e.psThu, 0), tra: es.reduce((s, e) => s + e.psTra, 0),
         teams: [...new Set(es.map(e => e.team).filter(Boolean))], daLa: !!M.daLaKH.get(d.id), caNhan: d.caNhan, pending: d.status === 'Chờ duyệt' };
     });
-    host.innerHTML = '<div class="card" id="dtList"></div>';
+    const noCif = S.data.doiTac.filter(d => d.mst && !d.caNhan && !d.cifTP).length;
+    host.innerHTML = (CN.store.canDirect() ? `<div class="row" style="margin:0 0 12px"><button class="btn sm" id="dtSyncCif" title="Tra CIF trong file nội bộ TPBank cho mọi đối tác có MST">Đối chiếu CIF nội bộ (${noCif} đối tác có MST chưa có CIF)</button></div>` : '')
+      + '<div class="card" id="dtList"></div>';
+    if ($('dtSyncCif')) $('dtSyncCif').onclick = async () => {
+      try { CN.ui.busy(true, 'Đang đối chiếu CIF nội bộ…'); const r = await CN.net.write('sync-cif', {}, { timeoutMs: 120000 }); CN.ui.toast(`Đã đối chiếu ${r.checked} đối tác · cập nhật CIF ${r.updated}`, 'ok'); await CN.refresh(true); }
+      catch (e) { CN.ui.toast(e.message, 'err'); } finally { CN.ui.busy(false); }
+    };
     table($('dtList'), rows, [
       { k: 'ten', t: 'Đối tác', w: 260, f: r => `<b>${esc(r.ten)}</b>${r.pending ? ' ' + chip('Chờ duyệt', 'warn') : ''}${r.caNhan ? ' ' + chip('Cá nhân', 'gray') : ''}<br><small class="code">${esc(r.id)}</small> <small class="muted">${esc(r.mst || 'chưa có MST')}</small> ${mstChip(r.d)}` },
       { k: 'n', t: 'Số KHHH', num: true }, { k: 'teams', t: 'Team liên quan', f: r => r.teams.map(t => chip(t, 'gray')).join(''), sort: r => r.teams.length },
@@ -31,6 +37,7 @@
     const direct = CN.store.canDirect();
     host.innerHTML = `<div class="row" style="margin:0 0 12px"><a class="btn sm ghost" href="#/doi-tac">‹ Danh sách đối tác</a>
         <button class="btn sm" id="dtEdit">${direct ? 'Sửa' : 'Đề nghị sửa'} tên/MST</button><button class="btn sm" id="dtMerge">${direct ? 'Gộp vào đối tác khác' : 'Đề nghị gộp'}</button>
+        ${!d.mst && !d.caNhan ? '<button class="btn sm" id="dtInt" title="Tìm MST theo tên trong file nội bộ TPBank (tra tại máy)">Tìm MST (nội bộ TPBank)</button>' : ''}
         ${d.mst && !d.caNhan ? '<button class="btn sm" id="dtVqr">Kiểm MST (VietQR)</button>' : ''}</div>
       <div class="kpis">${kpi('KHHH liên kết', es.length, [...new Set(es.map(e => e.team).filter(Boolean))].join(' · '), 'pri')}
         ${kpi('KHHH phải thu từ đối tác', money(es.reduce((s, e) => s + e.psThu, 0)), 'đối tác là người mua')}${kpi('KHHH phải trả đối tác', money(es.reduce((s, e) => s + e.psTra, 0)), 'đối tác là nhà cung cấp')}
@@ -79,6 +86,18 @@
       if (!CN.store.dtById(into)) { CN.ui.toast('Chọn đúng mã đối tác (DTxxxxx) trong danh sách', 'err'); return; }
       const out = await save('merge-doitac', { from: id, into }, 'Đã gộp vào ' + into);
       if (out && out.applied) CN.go('doi-tac', into);
+    };
+    if ($('dtInt')) $('dtInt').onclick = async () => {
+      let res;
+      try { CN.ui.busy(true, 'Đang tra nội bộ…'); const off = CN.mstidx.on(st => CN.ui.busy(true, st.msg || 'Đang tra nội bộ…')); try { res = await CN.mstidx.search([d.ten], null, 'Đối tác ' + id); } finally { off(); } }
+      catch (e) { CN.ui.toast(e.message, 'err'); return; } finally { CN.ui.busy(false); }
+      if (res === null) { CN.ui.toast(CN.mstidx.state.msg, 'err'); return; }
+      const cs = res[0].cands;
+      if (!cs.length) { CN.ui.toast('Nội bộ không có tên này — thử tra ngoài (masothue/doanhnghiep.vn)'); return; }
+      const r = await CN.ui.ask('MST nội bộ TPBank — ' + d.ten, `<p class="muted small">Ứng viên theo tên (điểm khớp). ${res[0].auto ? 'Ứng viên 1 khớp chắc chắn.' : 'Chưa chắc chắn — kiểm tên trước khi chọn.'}</p>
+        <label class="fld"><span>Chọn MST</span><select data-k="mst">${cs.map((c, j) => `<option value="${esc(c.mst)}" ${j ? '' : 'selected'}>${esc(c.mst)} · ${Math.round(100 * c.score)}% · ${esc(c.name)}${c.branch ? ' (chi nhánh)' : ''}</option>`).join('')}</select></label>
+        ${direct ? '' : '<p class="muted small">Bạn là thành viên: thay đổi thành yêu cầu chờ teamlead duyệt.</p>'}`, { yes: direct ? 'Gán MST' : 'Gửi đề nghị' });
+      if (r.ok && r.fields.mst) await save('edit-doitac', { cid: id, sau: { mst: r.fields.mst } }, 'Đã gán MST ' + r.fields.mst + ' (CIF tự đối chiếu)');
     };
     if ($('dtVqr')) $('dtVqr').onclick = async () => {
       const v = await CN.mst.vietqr(d.mst);

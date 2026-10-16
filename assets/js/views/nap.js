@@ -218,9 +218,10 @@
     N.assign = res.map((a, i) => {
       const p = prev.get(a.raw), d = K.doiTac.find(x => x.id === a.id);
       const base = Object.assign(a, { n: names[i].n, kh: [...names[i].kh], tk: [...names[i].tk], choice: a.kind === 'goi-y' ? 'new' : null, ten: d ? d.ten : a.raw, mst: d ? d.mst : '', ttMst: d ? d.ttMst : '', nguonMst: d ? d.nguonMst : '' });
-      if (p) Object.assign(base, { choice: p.choice, ten: p.ten, tenSua: p.tenSua, tenNote: p.tenNote, mst: p.mst, ttMst: p.ttMst, nguonMst: p.nguonMst, mstCands: p.mstCands });
+      if (p) Object.assign(base, { choice: p.choice, ten: p.ten, tenSua: p.tenSua, tenNote: p.tenNote, mst: p.mst, ttMst: p.ttMst, nguonMst: p.nguonMst, mstCands: p.mstCands, intAuto: p.intAuto, intNone: p.intNone, cif: p.cif });
       return base;
     });
+    N.intRun = false; N.intRes = null;   // danh sách tên đổi → tra nội bộ lại cho dòng chưa có MST
   }
   const KIND = { alias: ['Tên gộp đã duyệt', 'ok'], mst: ['Trùng MST', 'ok'], 'trung-ten': ['Trùng tên chuẩn hóa', 'ok'], 'goi-y': ['Gợi ý — chờ duyệt', 'warn'], moi: ['Đối tác mới', 'info'], 'ca-nhan': ['Cá nhân? — không tra ngoài', 'warn'] };
   const finalId = a => (a.kind === 'goi-y' && a.choice && a.choice !== 'new' ? a.choice : a.id);
@@ -238,14 +239,18 @@
     if (!N.assign) buildAssign();
     const cnt = k => N.assign.filter(a => a.kind === k).length;
     box.innerHTML = `<div class="card"><h2>Tra MST</h2>
+        <div class="row"><b>① Nội bộ TPBank (tra trước):</b><span id="npInt" class="small">${esc(intStatus())}</span><button class="btn sm" id="npIntAll">Tra lại nội bộ</button></div>
+        <div class="row"><b>② Công cụ ngoài</b> <span class="muted small">— chỉ cho tên nội bộ không ra hoặc để kiểm trạng thái hoạt động.</span></div>
         <div class="row"><label>Khóa doanhnghiep.vn (miễn phí 1.000 lượt/tháng, lưu trên máy này) <input id="npDnKey" type="password" style="width:260px" value="${esc(CN.mst.key())}"></label><span id="npQuota" class="muted small"></span></div>
         <div class="row"><button class="btn" id="npVqrAll">Kiểm tất cả MST đã có (VietQR)</button><button class="btn" id="npDnAll">Tìm MST theo tên cho đối tác mới (doanhnghiep.vn)</button><span id="npMstSt" class="muted small"></span></div>
-        <p class="muted small">Chỉ gửi MST hoặc tên pháp nhân của đối tác — không gửi tên KHHH, số tiền, cá nhân. Ứng viên tìm theo tên luôn chờ người chọn.</p></div>
+        <p class="muted small">Tra nội bộ chạy ngay trên máy này (không gửi tên đi đâu); chỉ tự điền khi khớp chắc chắn, còn lại hiện ứng viên để chọn. Công cụ ngoài chỉ nhận MST hoặc tên pháp nhân của đối tác — không gửi tên KHHH, số tiền, cá nhân.</p></div>
       <div class="card"><h2>Đối tác ${chip(N.assign.length + ' tên', 'gray')}${Object.keys(KIND).filter(cnt).map(k => chip(KIND[k][0] + ': ' + cnt(k), KIND[k][1])).join('')}${chip(N.assign.filter(a => a.mst).length + ' có MST', 'gray')}</h2>
         <div class="tblwrap"><table class="tbl map"><thead><tr><th>Tên đối tác (gốc)</th><th>Dòng · TK</th><th>Kết quả</th><th>Mã</th><th>Tên pháp lý (chuẩn)</th><th>MST</th><th>Tra MST</th></tr></thead><tbody>${N.assign.map(mapRow).join('')}</tbody></table></div>
         ${CN.store.canDirect() ? '' : '<p class="muted small">Sửa tên/MST của đối tác <b>đã có trong kho</b> sẽ thành yêu cầu chờ teamlead duyệt.</p>'}</div>
       <div class="row end"><button class="btn" id="npBack2">‹ ② Duyệt số liệu</button><button class="btn pri" id="npToSave">Tiếp → ④ ${CN.store.canDirect() ? 'Lưu' : 'Gửi duyệt'}</button></div>`;
     bindMap(box);
+    $('npIntAll').onclick = () => runInternal(box, true);
+    if (!N.intRun) { N.intRun = true; runInternal(box, false); }
     $('npDnKey').onchange = () => CN.mst.setKey($('npDnKey').value.trim());
     $('npVqrAll').onclick = async () => {
       const list = N.assign.filter(a => a.mst && !a.caNhan && a.kind !== 'ca-nhan' && !/VietQR/.test(a.nguonMst || ''));
@@ -261,6 +266,62 @@
     $('npBack2').onclick = () => goStep(2);
     $('npToSave').onclick = () => goStep(4);
   }
+  /* ---- Tra nội bộ TPBank (CN.mstidx) — trước công cụ ngoài ---- */
+  const VN_RE = /[À-ỹĐđ]/;
+  const tra = a => !a.caNhan && a.kind !== 'ca-nhan';
+  function intStatus() {
+    const st = CN.mstidx.state, R = N.intRes;
+    if (N.intBusy) return N.intMsg || st.msg || 'Đang tra…';
+    if (R) return `${R.n} tên chưa có MST → tự điền ${R.auto} · có ứng viên ${R.cand} · không ra ${R.none}` + (R.cif ? ` · ${R.cif} đối tác là KH TPBank (CIF)` : '');
+    return st.status === 'off' || st.status === 'error' ? st.msg : 'chưa tra';
+  }
+  function applyInternal(a, r) {
+    a.intNone = false;
+    if (r.auto) {
+      const c = r.cands[0];
+      a.mst = c.mst; a.ttMst = ''; a.nguonMst = CN.mstidx.label(); a.intAuto = { mst: c.mst, score: c.score }; a.mstCands = null;
+      if (VN_RE.test(c.name)) setTenFrom(a, c.name, 'Nội bộ TPBank');
+    } else if (r.cands.length) {
+      a.mstCands = r.cands.map(c => ({ mst: c.mst, name: c.name, address: c.branch ? 'chi nhánh' : '', status: '', src: CN.mstidx.label(), srcName: 'Nội bộ TPBank', score: c.score }));
+    } else a.intNone = true;
+  }
+  async function cifAll() {
+    const ms = N.assign.filter(a => a.mst && tra(a)).map(a => a.mst);
+    if (!ms.length) return 0;
+    const r = await CN.mstidx.cif(ms, 'Nạp dữ liệu');
+    N.assign.forEach(a => { a.cif = (a.mst && r.map[a.mst]) || null; });
+    return N.assign.filter(a => a.cif).length;
+  }
+  async function runInternal(box, force) {
+    if (N.intBusy) return;
+    const list = N.assign.filter(a => tra(a) && (!a.mst || (force && a.intAuto && a.mst === a.intAuto.mst)));
+    N.intBusy = true; N.intMsg = '';
+    const paint = () => { if ($('npInt')) $('npInt').textContent = intStatus(); };
+    const off = CN.mstidx.on(paint);
+    let changed = false;
+    try {
+      paint();
+      const res = list.length ? await CN.mstidx.search(list.map(a => curTen(a) || a.raw), p => { N.intMsg = `Đang tra nội bộ ${Math.round(100 * p)}% (${list.length} tên)…`; paint(); }, 'Nạp dữ liệu') : [];
+      if (res === null) { N.intRes = null; return; }
+      res.forEach((r, i) => applyInternal(list[i], r));
+      N.intRes = { n: list.length, auto: res.filter(r => r.auto).length, cand: res.filter(r => !r.auto && r.cands.length).length, none: res.filter(r => !r.cands.length).length, cif: 0 };
+      N.intRes.cif = await cifAll();
+      changed = true;
+    } catch (e) { CN.ui.toast('Tra nội bộ: ' + e.message, 'err'); }
+    finally {
+      off(); N.intBusy = false;
+      if (changed && N.step === 3 && $('npInt')) step3(box); else paint();   // chưa có chỉ mục → chỉ đổi dòng trạng thái, không vẽ lại bảng
+    }
+  }
+  async function intOne(a) {
+    try {
+      const res = await CN.mstidx.search([curTen(a) || a.raw], null, 'Nạp dữ liệu (1 tên)');
+      if (res === null) { CN.ui.toast(CN.mstidx.state.msg, 'err'); return; }
+      applyInternal(a, Object.assign({}, res[0], { auto: false }));   // tra lại 1 dòng: luôn để người chọn
+      if (!res[0].cands.length) CN.ui.toast('Nội bộ không có tên này — thử "Tìm theo tên" (doanhnghiep.vn)');
+    } catch (e) { CN.ui.toast(e.message, 'err'); }
+  }
+
   function tenCell(a, ex) {
     const v = curTen(a), nt = a.tenNote;
     const note = !nt ? '' : nt.same ? `<div class="tnote okc">✓ Tên khớp ${esc(nt.src)}</div>`
@@ -271,14 +332,16 @@
   function mapRow(a, i) {
     const fid = finalId(a), ex = isExisting(a), ca = a.caNhan || a.kind === 'ca-nhan', d = CN.store.dtById(fid);
     const sugg = a.kind === 'goi-y' ? `<div class="sugg">${a.cand.map(c => `<label><input type="radio" name="g${i}" value="${esc(c.id)}" ${a.choice === c.id ? 'checked' : ''}> Gộp vào ${CN.store.dtById(c.id) ? '<b>' + esc(c.id) + '</b> ' : ''}${esc(c.ten)} <small class="muted">(${CN.store.dtById(c.id) ? '' : 'đối tác mới trong lô này · '}${esc(c.why)})</small></label>`).join('')}<label><input type="radio" name="g${i}" value="new" ${a.choice === 'new' ? 'checked' : ''}> Giữ là đối tác mới</label></div>` : '';
-    const mc = (a.mstCands || []).map((c, j) => `<div class="mc">${c.status && !/dang hoat dong|đang hoạt động/i.test(c.status) ? '⚠ ' : ''}<b>${esc(c.mst)}</b> ${esc(c.name)} <small class="muted">${esc(c.address || '')} ${esc(c.status || '')}</small> <button class="btn sm" data-act="pickMst" data-j="${j}">Chọn</button></div>`).join('');
+    const mc = (a.mstCands || []).map((c, j) => `<div class="mc">${c.status && !/dang hoat dong|đang hoạt động/i.test(c.status) ? '⚠ ' : ''}${c.srcName ? chip('Nội bộ ' + Math.round(100 * c.score) + '%', c.score >= 0.86 ? 'ok' : 'gray') + ' ' : ''}<b>${esc(c.mst)}</b> ${esc(c.name)} <small class="muted">${esc(c.address || '')} ${esc(c.status || '')}</small> <button class="btn sm" data-act="pickMst" data-j="${j}">Chọn</button></div>`).join('');
+    const intChip = (a.intAuto && a.mst === a.intAuto.mst ? '<br>' + chip('MST tự điền (nội bộ ' + Math.round(100 * a.intAuto.score) + '%)', 'ok') : '')
+      + (a.cif ? '<br>' + chip('KH TPBank · CIF ' + a.cif.cif + (a.cif.via === 'cty-me' ? ' (cty mẹ)' : ''), 'ok') : '') + (a.intNone && !a.mst ? '<br>' + chip('Nội bộ không có', 'gray') : '');
     const st = a.ttMst ? `<div class="${/hoạt động/i.test(a.ttMst) && !/ngừng|tạm|bỏ địa chỉ|giải thể|không hoạt động/i.test(a.ttMst) ? 'okc' : 'errc'}"><small>${esc(a.ttMst)}${a.nguonMst ? ' · ' + esc(a.nguonMst) : ''}</small></div>` : '';
     return `<tr data-i="${i}"><td>${esc(a.raw)}${sugg}</td><td><small>${a.n} dòng · TK ${esc(a.tk.join('/'))}</small></td>
-      <td>${chip(KIND[a.kind] ? KIND[a.kind][0] : a.kind, KIND[a.kind] ? KIND[a.kind][1] : 'gray')}${ca && a.kind !== 'ca-nhan' ? '<br>' + chip('Cá nhân?', 'warn') : ''}</td>
+      <td>${chip(KIND[a.kind] ? KIND[a.kind][0] : a.kind, KIND[a.kind] ? KIND[a.kind][1] : 'gray')}${ca && a.kind !== 'ca-nhan' ? '<br>' + chip('Cá nhân?', 'warn') : ''}${intChip}</td>
       <td class="code">${ex ? esc(fid) + '<br><small class="muted">đã có trong kho</small>' : '<small class="muted">mã mới<br>(cấp khi lưu)</small>'}${d && d.status === 'Chờ duyệt' ? '<br>' + chip('chờ duyệt', 'warn') : ''}</td>
       <td class="ten">${tenCell(a, ex)}</td>
       <td><input data-f="mst" value="${esc(a.mst || '')}" style="width:130px" ${ex && d && d.mst ? 'disabled title="Sửa MST đối tác đã có ở trang Đối tác"' : ''}>${st}</td>
-      <td style="white-space:nowrap">${ca ? '<small class="muted">Không tra (cá nhân)</small>' : '<button class="btn sm" data-act="vqr" title="MST → tên pháp lý + trạng thái (VietQR)">Kiểm MST</button> <button class="btn sm" data-act="dn" title="Tìm MST theo tên (doanhnghiep.vn, cần khóa)">Tìm theo tên</button> <button class="btn sm ghost" data-act="web" title="Mở trang tìm kiếm">Web</button>'}${mc ? '<div>' + mc + '</div>' : ''}</td></tr>`;
+      <td style="white-space:nowrap">${ca ? '<small class="muted">Không tra (cá nhân)</small>' : '<button class="btn sm" data-act="int" title="Tìm MST theo tên trong file nội bộ TPBank (tra tại máy)">Nội bộ</button> <button class="btn sm" data-act="vqr" title="MST → tên pháp lý + trạng thái (VietQR)">Kiểm MST</button> <button class="btn sm" data-act="dn" title="Tìm MST theo tên (doanhnghiep.vn, cần khóa)">Tìm theo tên</button> <button class="btn sm ghost" data-act="web" title="Mở trang tìm kiếm">Web</button>'}${mc ? '<div>' + mc + '</div>' : ''}</td></tr>`;
   }
   function bindMap(box) {
     const again = () => step3(box);
@@ -289,7 +352,7 @@
       tr.querySelectorAll('[data-f]').forEach(inp => inp.onchange = () => {
         const v = inp.value.replace(/\s+/g, ' ').trim();
         if (inp.dataset.f === 'ten') { if (v === curTen(a)) return; a.ten = v; a.tenSua = true; a.tenNote = null; again(); return; }
-        a[inp.dataset.f] = v; if (inp.dataset.f === 'mst') { a.ttMst = ''; a.nguonMst = 'nhập tay'; }
+        a[inp.dataset.f] = v; if (inp.dataset.f === 'mst') { a.ttMst = ''; a.nguonMst = 'nhập tay'; a.intAuto = null; a.cif = null; }
       });
       const ta = tr.querySelector('textarea[data-f=ten]');
       if (ta) ta.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ta.blur(); } };
@@ -297,8 +360,15 @@
       act('useTen', () => { const nt = a.tenNote; a.ten = nt.nu; a.tenSua = true; a.tenNote = Object.assign({}, nt, { applied: true }); again(); });
       act('vqr', async () => { const r = await mstVerify(a); if (r && !r.ok) CN.ui.toast(r.err, 'err'); again(); });
       act('dn', async () => { await mstSearch(a); again(); });
+      act('int', async () => { await intOne(a); again(); });
       act('web', () => window.open('https://masothue.com/Search/?q=' + encodeURIComponent(curTen(a) || a.raw) + '&type=auto', '_blank', 'noopener'));
-      tr.querySelectorAll('[data-act=pickMst]').forEach(btn => btn.onclick = () => { const c = a.mstCands[+btn.dataset.j]; a.mst = c.mst; a.ttMst = c.status || ''; a.nguonMst = c.src; setTenFrom(a, c.name, 'doanhnghiep.vn'); a.mstCands = null; again(); });
+      tr.querySelectorAll('[data-act=pickMst]').forEach(btn => btn.onclick = async () => {
+        const c = a.mstCands[+btn.dataset.j]; a.mst = c.mst; a.ttMst = c.status || ''; a.nguonMst = c.src; a.intAuto = null; a.intNone = false;
+        if (!c.srcName || VN_RE.test(c.name)) setTenFrom(a, c.name, c.srcName || 'doanhnghiep.vn');   // tên nội bộ không dấu → không ghi đè tên
+        a.mstCands = null;
+        try { const r = await CN.mstidx.cif([a.mst], 'Nạp dữ liệu (chọn MST)'); a.cif = r.map[a.mst] || null; } catch (e) { a.cif = null; }
+        again();
+      });
     });
   }
   async function mstVerify(a) {

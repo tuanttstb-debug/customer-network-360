@@ -7,6 +7,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import crypto from 'node:crypto';
+import zlib from 'node:zlib';
 import { makeEnv } from './gas_harness.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -52,7 +54,7 @@ const fake2 = [['TỔNG HỢP CÔNG NỢ PHẢI TRẢ'], ['Tài khoản: 331; T�
 const wb2 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb2, XLSX.utils.aoa_to_sheet(fake2), 'S1');
 const XL2 = path.join(TMP, 'gia_lap_331.xlsx'); XLSX.writeFile(wb2, XL2);
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', protocolTimeout: 0, args: ['--no-first-run'] });
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', protocolTimeout: 0, args: ['--no-first-run', '--unsafely-treat-insecure-origin-as-secure=' + BASE.slice(0, -1)] });   // prod chạy https (github.io) → crypto.subtle cần secure context
 const ext = [], errs = [], csp = [];
 let vqrName = 'CÔNG TY TRÁCH NHIỆM HỮU HẠN XÂY DỰNG GIẢ LẬP MỘT';
 async function newPage(curEnv) {
@@ -253,6 +255,67 @@ try {
     const r = await s.addJob('recognize', c); return r.data.text;
   });
   ok(/12[.,]?345/.test(ocr) && /n[ợo]/i.test(ocr), 'OCR offline đọc được chữ Việt + số: ' + JSON.stringify(ocr.trim()));
+
+  console.log('— MST nội bộ: Admin tải chỉ mục lên → tra thử → bước ③ tự điền MST + CIF → Đối tác');
+  const env3 = makeEnv({ users: USERS, props: { AUTH_SECRET: 'e2e-secret' } }); env3.ctx.setupAll();
+  {
+    // Chỉ mục GIẢ: 3.000 tên độn + đối tác của tệp 131 giả lập (1 tên trùng 2 MST → không tự điền)
+    const W = ['AN', 'BINH', 'PHAT', 'THANH', 'HUNG', 'MINH', 'LONG', 'PHUC', 'TAN', 'VIET'], L = ['THƯƠNG MẠI', 'XÂY DỰNG', 'SẢN XUẤT', 'VẬN TẢI'];
+    const lines = ['# MST\tTên'];
+    for (let i = 0; i < 3000; i++) lines.push(`${2000000000 + i}\tCÔNG TY TNHH ${L[i % 4]} ${W[i % 10]} ${W[(i * 7) % 10]} ${W[(i * 3) % 10]} ${i}`);
+    lines.push('0101234567\tCÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT', '0102222221\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI', '0102222222\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI');
+    const nameGz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n')), cifGz = zlib.gzipSync(Buffer.from('# MST\tCIF\tBRN\tSEG\n0101234567\t77700001\t101\t110000\n'));
+    const sha = b => crypto.createHash('sha256').update(b).digest('hex');
+    const man = { version: '20261015-1800', builtAt: '2026-10-15T18:00:00', source: 'gia_lap.xlsx', counts: { names: lines.length - 1, cif: 1 },
+      files: { name: { file: 'name_index.tsv.gz', bytes: nameGz.length, sha256: sha(nameGz) }, cif: { file: 'cif_map.tsv.gz', bytes: cifGz.length, sha256: sha(cifGz) } } };
+    const D = path.join(TMP, 'mst_build'); fs.mkdirSync(D);
+    fs.writeFileSync(path.join(D, 'manifest.json'), JSON.stringify(man)); fs.writeFileSync(path.join(D, 'name_index.tsv.gz'), nameGz); fs.writeFileSync(path.join(D, 'cif_map.tsv.gz'), cifGz);
+    const pM = await newPage(env3); await login(pM, 'admin1', 'a');
+    await go(pM, '#/danh-muc'); await pM.click('.tab[data-t=mst]');
+    await pM.waitForFunction(() => /Chưa có chỉ mục/.test(document.getElementById('mstMeta').innerText), { timeout: 15000 });
+    ok(true, 'Danh mục → MST nội bộ: báo chưa có chỉ mục');
+    await (await pM.$('#mstFiles')).uploadFile(...['manifest.json', 'name_index.tsv.gz', 'cif_map.tsv.gz'].map(f => path.join(D, f)));
+    await pM.waitForFunction(() => !document.getElementById('mstUp').disabled, { timeout: 15000 });
+    await pM.click('#mstUp'); await modalYes(pM);
+    await pM.waitForFunction(() => /Đã tải lên bản/.test(document.getElementById('mstUpSt').innerText), { timeout: 30000 });
+    ok(env3.ctx.mstManifest_().version === '20261015-1800', 'Admin chọn 3 tệp build → tải lên GAS (kiểm sha256 phía trình duyệt + từng mảnh phía server)');
+    await pM.type('#mstQ', 'Cty TNHH Xay dung Gia Lap Mot'); await pM.click('#mstGo');
+    await pM.waitForSelector('#mstTbl', { timeout: 60000 });
+    const t1 = await text(pM, '#mstTbl tbody tr');
+    ok(/0101234567/.test(t1) && /CIF 77700001/.test(t1), 'tra thử (viết tắt, không dấu) → ứng viên 1 đúng MST + chip CIF (CIF tra ở server)');
+    ok(await pM.evaluate(async () => (await indexedDB.databases()).some(d => d.name === 'cn360_mst')), 'chỉ mục tên→MST lưu IndexedDB của máy này (ngoại lệ A4 có chủ đích)');
+    await shot(pM, '10_mst_noi_bo');
+
+    await go(pM, '#/nap');
+    await pM.type('#npCif', '900009'); await pM.type('#npCn', 'HCM'); await pM.type('#npTen', 'KHHH GIẢ LẬP CHÍN');
+    await (await pM.$('#npFiles')).uploadFile(XL);
+    await pM.click('#npRead'); await pM.waitForSelector('.batch');
+    await pM.click('#npToMap'); await pM.waitForSelector('table.map');
+    await pM.waitForFunction(() => CN.views.nap._state.intRes, { timeout: 60000 });
+    const A = await pM.evaluate(() => CN.views.nap._state.assign.map(a => ({ raw: a.raw, mst: a.mst, auto: !!a.intAuto, cif: a.cif && a.cif.cif, cands: (a.mstCands || []).length, kind: a.kind, src: a.nguonMst })));
+    ok(A[0].mst === '0101234567' && A[0].auto && A[0].cif === '77700001' && /^Nội bộ TPBank/.test(A[0].src), '③ tự tra nội bộ: "Công ty TNHH Xây dựng Giả Lập Một" → tự điền MST + CIF, nguồn "Nội bộ TPBank"');
+    ok(!A[1].mst && A[1].cands === 2, '③ tên trùng 2 MST → KHÔNG tự điền, hiện 2 ứng viên để chọn');
+    ok(!A[3].mst && A[3].kind === 'ca-nhan', '③ cá nhân → không tra');
+    ok(/tự điền 1/.test(await text(pM, '#npInt')) && /KH TPBank \(CIF\)/.test(await text(pM, '#npInt')), 'dòng trạng thái: số tự điền + số đối tác là KH TPBank');
+    ok(/KH TPBank · CIF 77700001/.test(await text(pM, 'tr[data-i="0"]')), 'chip "KH TPBank · CIF" trên dòng đối tác');
+    await shot(pM, '11_nap_mst_noi_bo');
+    await pM.click('#npToSave'); await pM.waitForSelector('#npSave');
+    await pM.click('#npSave'); await pM.waitForFunction(() => window.__lastSubmit && location.hash.startsWith('#/khach-hang/'), { timeout: 30000 }); await idle(pM);
+    const d1 = env3.db().table('DoiTac').find(d => d['MST'] === '0101234567');
+    ok(d1 && d1['CIF (nếu là KH TP)'] === '77700001' && /^Nội bộ TPBank/.test(d1['Nguồn MST']), 'lưu → server tự điền CIF vào danh mục đối tác');
+    ok(await pM.evaluate(id => !!CN.store.S.M.daLaKH.get(id), d1['Counterparty_ID']), 'mô hình: đối tác có CIF nội bộ = "Đã là KH TPBank" (loại khỏi Cơ hội)');
+
+    const hai = env3.db().table('DoiTac').find(d => /VẬT TƯ GIẢ LẬP HAI|Vật tư Giả Lập Hai/i.test(d['Tên pháp lý']) && !d['MST']);
+    await go(pM, '#/doi-tac/' + hai['Counterparty_ID']);
+    await pM.click('#dtInt'); await pM.waitForSelector('#modal.on [data-k=mst]', { timeout: 30000 });
+    ok((await pM.$$eval('#modal option', o => o.length)) === 2, 'Đối tác chưa có MST → "Tìm MST (nội bộ)" → 2 ứng viên');
+    await pM.select('#modal [data-k=mst]', '0102222222'); await modalYes(pM);
+    await pM.waitForFunction(() => /0102222222/.test(document.getElementById('pageSub').innerText), { timeout: 20000 });
+    ok(env3.db().table('DoiTac').find(d => d['Counterparty_ID'] === hai['Counterparty_ID'])['MST'] === '0102222222', 'chọn ứng viên → gán MST (Admin sửa thẳng)');
+    ok(env3.db().table('NhatKy').some(r => r['Hành động'] === 'Tra MST nội bộ') && env3.db().table('NhatKy').some(r => r['Hành động'] === 'Tra CIF nội bộ'), 'nhật ký: tra MST nội bộ (số lượng) + tra CIF');
+    await pM.click('#btnLogout'); await new Promise(r => setTimeout(r, 400));
+    ok(await pM.evaluate(async () => !(await indexedDB.databases()).some(d => d.name === 'cn360_mst')), 'đăng xuất → xóa chỉ mục khỏi máy');
+  }
 
   ok(ext.length === 0, 'không có request nào ra ngoài GAS/VietQR (giả lập)' + (ext.length ? ': ' + [...new Set(ext)].slice(0, 5).join(' | ') : ''));
   ok(csp.length === 0, 'không vi phạm CSP' + (csp.length ? ': ' + csp.slice(0, 3).join(' | ') : ''));

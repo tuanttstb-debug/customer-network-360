@@ -2,6 +2,11 @@
 
 Nợ kỹ thuật & hiện tượng lặp lại. Mới nhất trên cùng. ID: `TD-CN360-nn`.
 
+## TD-CN360-04 — Chỉ mục MST nội bộ TPBank trên Drive TK chủ + IndexedDB máy người dùng (2026-10-15)
+**Hiện tượng:** file nội bộ TPBank (tên + MST ~870k pháp nhân) để trên Drive TK cá nhân và tải về IndexedDB trình duyệt người dùng (ngoại lệ A4 "không lưu dữ liệu trên máy"); bảng MST→CIF chỉ GAS đọc.
+**Nguyên nhân:** anh ưu tiên tốc độ tra + trải nghiệm, chấp nhận bảo mật GG Sheet/Drive hiện tại, sẽ gỡ khi có cảnh báo (phỏng vấn 15/10).
+**Hướng trả nợ:** nút Admin "Gỡ chỉ mục" + guard hằng ngày · xóa IndexedDB khi đăng xuất/30 ngày · chuyển cùng TD-CN360-01 khi có server nội bộ. **Ưu tiên:** cao (tuân thủ).
+
 ## TD-CN360-03 — Lõi đọc 131–331 có 2 bản (AIOS gốc ↔ core/ ở đây) (2026-10-13)
 **Hiện tượng:** `core/{parse131,mapping,pipeline,ocr_core,deskew}.js` là bản chép từ AIOS `08_Work/W-2610-he-sinh-thai-131-331/tool/src/`; sửa 1 nơi dễ quên nơi kia (vd vá `\W` cắt chữ có dấu 13/10 phải sửa cả 2).
 **Hướng trả nợ:** sau MVP 16/10 chuyển gốc về repo này (A5) — công cụ offline build từ `core/` · tạm thời: sửa ở AIOS rồi `cp` sang + chạy 3 bộ test. **Ưu tiên:** trung.

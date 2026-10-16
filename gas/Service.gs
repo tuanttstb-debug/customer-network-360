@@ -128,6 +128,7 @@ function apiSubmitBatch_(u, body) {
       }
       outLots.push({ id: id, status: lot['Trạng thái'], rows: rws.length });
     });
+    try { fillCif_(dts, true); } catch (e) { /* chỉ mục MST nội bộ lỗi/thiếu → không chặn nạp lô */ }
     writeTable_('DoiTac', dts); writeTable_('TenGop', tg); writeTable_('Lo', lots); writeTable_('KHHH', kh);
     appendRows_('CongNo', cn);
     log_(u, direct ? 'Nạp lô (vào thẳng)' : 'Nạp lô (chờ duyệt)', lotTag, cn.length + ' dòng · ' + newDt.length + ' đối tác mới · ' + ycNew.length + ' yêu cầu sửa danh mục');
@@ -150,7 +151,7 @@ function _newYc_(u, loai, cid, truoc, sau, now) {
 function _applyDtEdit_(d, sau, u, now) {
   var note = [];
   if (sau.ten !== undefined) { d['Tên pháp lý'] = sau.ten; note.push('tên'); }
-  if (sau.mst !== undefined) { d['MST'] = sau.mst; note.push('MST'); }
+  if (sau.mst !== undefined) { d['MST'] = sau.mst; note.push('MST'); d['CIF (nếu là KH TP)'] = ''; try { fillCif_([d], true); } catch (e) { /* không chặn sửa */ } }
   if (sau.tenRutGon !== undefined) d['Tên rút gọn'] = sau.tenRutGon;
   if (sau.nganh !== undefined) d['Ngành'] = sau.nganh;
   if (sau.ghiChu !== undefined) d['Ghi chú'] = sau.ghiChu;
@@ -351,7 +352,7 @@ function apiAudit_(u, body) {
 }
 
 /** Ghi nhật ký thao tác phía trình duyệt (xem chi tiết KHHH/đối tác, xuất Excel). */
-var CLIENT_LOG_ACTIONS = ['Xem KHHH', 'Xem đối tác', 'Xuất Excel', 'Tra cứu'];
+var CLIENT_LOG_ACTIONS = ['Xem KHHH', 'Xem đối tác', 'Xuất Excel', 'Tra cứu', 'Tra MST nội bộ'];
 function apiLog_(u, body) {
   var a = str_(body.what);
   if (CLIENT_LOG_ACTIONS.indexOf(a) < 0) throw new Error('Hành động nhật ký không hợp lệ.');

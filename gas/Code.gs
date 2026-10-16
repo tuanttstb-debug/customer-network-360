@@ -18,6 +18,12 @@ var ACTIONS = {
   'import-kho':     { fn: apiImportKho_, write: true },
   'audit':          { fn: apiAudit_ },
   'log':            { fn: apiLog_ },
+  'mst-meta':       { fn: apiMstMeta_ },
+  'mst-part':       { fn: apiMstPart_ },
+  'mst-cif':        { fn: apiMstCif_ },
+  'sync-cif':       { fn: apiSyncCif_, write: true },
+  'mst-upload':     { fn: apiMstUpload_, write: true },
+  'mst-remove':     { fn: apiMstRemove_, write: true },
 };
 
 function _json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
