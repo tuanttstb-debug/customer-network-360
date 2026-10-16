@@ -46,11 +46,13 @@ const fake = [
 const wb0 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb0, XLSX.utils.aoa_to_sheet(fake), 'S1');
 const XL = path.join(TMP, 'gia_lap_131.xlsx'); XLSX.writeFile(wb0, XL);
 // 331 cho KHHH thứ 2 (team MB) — chung đối tác "Giả Lập Một"
-const fake2 = [['TỔNG HỢP CÔNG NỢ PHẢI TRẢ'], ['Tài khoản: 331; Từ ngày 01/01/2025 đến ngày 31/12/2025'], [],
-  ['STT', 'Tên nhà cung cấp', 'Số dư đầu kỳ', '', 'Số phát sinh', '', 'Số dư cuối kỳ', ''], ['', '', 'Nợ', 'Có', 'Nợ', 'Có', 'Nợ', 'Có'],
-  [1, 'CÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT', 0, 500000000, 4000000000, 5000000000, 0, 1500000000],
-  [2, 'Công ty TNHH Thép Giả Ba', 0, 0, 1000000000, 3000000000, 0, 2000000000],
-  ['', 'TỔNG CỘNG', 0, 500000000, 5000000000, 8000000000, 0, 3500000000]];
+// dạng "Sổ tổng hợp công nợ theo đối tượng" (phần mềm kế toán): Mã TK · Mã ĐT (= MST) · dòng Cộng TK · cột cờ · năm 2 chữ số
+const fake2 = [['CÔNG TY GIẢ LẬP HAI'], ['SỔ TỔNG HỢP CÔNG NỢ THEO ĐỐI TƯỢNG'], ['Tài khoản : (331)'], ['Từ ngày 01/01/25 đến ngày 31/12/25'], [],
+  ['TT', 'Mã', 'Mã', 'Tên đối tượng', 'Số dư đầu kỳ (Vnd)', '', 'Phát sinh trong kỳ (Vnd)', '', 'Số dư cuối kỳ (Vnd)'], ['', 'TK', 'ĐT', '', 'Nợ', 'Có', 'Nợ', 'Có', 'Nợ', 'Có'],
+  [1, '331', '0101234567', 'CÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT', 0, 500000000, 4000000000, 5000000000, 0, 1500000000, '1'],
+  [2, '331', '0103333333', 'Công ty TNHH Thép Giả Ba', 0, 0, 1000000000, 3000000000, 0, 2000000000, '1'],
+  ['', '331', '', 'Cộng tài khoản : 331', 0, 500000000, 5000000000, 8000000000, 0, 3500000000, '2'],
+  ['', '', '', 'Tổng cộng', 0, 500000000, 5000000000, 8000000000, 0, 3500000000]];
 const wb2 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb2, XLSX.utils.aoa_to_sheet(fake2), 'S1');
 const XL2 = path.join(TMP, 'gia_lap_331.xlsx'); XLSX.writeFile(wb2, XL2);
 
@@ -167,12 +169,16 @@ try {
   await (await pTL.$('#npFiles')).uploadFile(XL2);
   await pTL.click('#npRead'); await pTL.waitForSelector('.batch');
   await pTL.click('#npToMap'); await pTL.waitForSelector('table.map');
-  const k2 = await pTL.evaluate(() => CN.views.nap._state.assign.map(a => a.kind));
-  ok(k2[0] === 'trung-ten', 'đối tác "CÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT" nhận ra là đối tác đã có (' + k2.join(',') + ')');
+  const b2 = await pTL.evaluate(() => { const b = CN.views.nap._state.batches[0]; return { tk: b.tk, ky: b.ky, n: b.rows.length, ok: b.rows.filter(r => r.bal === 'ok').length, src: b.src }; });
+  ok(b2.src === 'excel' && b2.tk === '331' && b2.ky === '2025-12-31' && b2.n === 2 && b2.ok === 2, `Excel sổ kế toán: TK 331 · kỳ 31/12/25 · bỏ dòng Cộng TK · 2/2 cân (${JSON.stringify(b2)})`);
+  const k2 = await pTL.evaluate(() => CN.views.nap._state.assign.map(a => ({ kind: a.kind, mst: a.mst, nguon: a.nguonMst })));
+  ok(k2[0].kind === 'mst', 'mã ĐT = MST → nhận ra đối tác đã có theo MST (' + k2.map(x => x.kind).join(',') + ')');
+  ok(k2[1].mst === '0103333333' && /Mã ĐT/.test(k2[1].nguon), 'đối tác mới: MST điền sẵn từ mã ĐT trên sổ');
   await pTL.click('#npToSave'); await pTL.waitForSelector('#npSave');
   ok(/Lưu vào kho/.test(await text(pTL, '#npSave')), '④ Teamlead: nút "Lưu vào kho"');
   await pTL.click('#npSave'); await pTL.waitForFunction(() => window.__lastSubmit && location.hash.startsWith('#/khach-hang/'), { timeout: 30000 }); await idle(pTL);
   ok((await pTL.evaluate(() => window.__lastSubmit.lots[0].status)) === 'Đã duyệt', 'Teamlead lưu → Đã duyệt ngay');
+  ok(env.db().table('DoiTac').some(d => /Thép Giả Ba/.test(d['Tên pháp lý']) && d['MST'] === '0103333333'), 'lưu → MST từ mã ĐT vào danh mục đối tác');
   ok(/Mạng lưới đối tác/.test(await text(pTL, '#view')) && /Thép Giả Ba/.test(await text(pTL, '#view')), 'mở Customer 360 của KHHH vừa nạp');
   await shot(pTL, '04_customer360');
 

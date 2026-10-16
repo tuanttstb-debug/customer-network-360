@@ -29,11 +29,11 @@
           <label class="fld"><span>CN (mã-tên ĐVKD) *</span><input id="npCn" value="${esc(M.cn)}" placeholder="VD: 001-HKM-Hoàn Kiếm"></label></div>
         <label class="fld" style="margin-top:8px"><span>Tên KHHH *</span><input id="npTen" value="${esc(M.tenKH)}" placeholder="Tên khách hàng đang vay"></label>
         <label class="fld" style="margin-top:8px"><span>MST KHHH</span><input id="npMst" value="${esc(M.mstKH)}"></label>
-        <label class="fld" style="margin-top:8px"><span>Tệp 131/331 (PDF scan, ảnh, Excel — nhiều tệp cùng KHHH được)</span><input type="file" id="npFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.xlsx,.xls,.csv"></label>
+        <label class="fld" style="margin-top:8px"><span>Tệp 131/331 — <b>ưu tiên Excel</b> (sổ tổng hợp công nợ xuất từ phần mềm kế toán: không qua OCR nên số khớp từng đồng, lấy luôn MST theo mã ĐT); PDF scan/ảnh khi không có Excel. Nhiều tệp cùng KHHH được.</span><input type="file" id="npFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.xlsx,.xls,.csv"></label>
         <div class="row"><label>Luồng đọc <select id="npWorkers"><option>2</option><option selected>4</option><option>6</option></select></label><button class="btn pri" id="npRead">Đọc tệp</button><button class="btn" id="npStop" style="display:none">Dừng</button></div>
         <div class="progress"><div id="npBar"></div></div><div id="npStatus" class="muted small" style="margin-top:4px"></div><div id="npMsg"></div></div>
       <div class="card"><h2>Đang có trong phiên nạp</h2>${N.batches.length ? N.batches.map(b => `<div class="row" style="margin-top:4px">${chip(b.tk || '?', 'info')} <b>${esc(b.file)}</b> <span class="muted">${esc(b.tenKH)} · ${b.rows.length} dòng</span></div>`).join('') + '<div class="row"><button class="btn sm" id="npNext">Tiếp → ② Duyệt</button><button class="btn sm ghost" id="npReset">Bỏ hết, nạp lại</button></div>' : '<p class="muted">Chưa đọc tệp nào.</p>'}
-        <h3>Cách dùng</h3><ol class="small"><li>Chọn <b>CIF</b> (KHHH đã có tự điền tên) + <b>CN</b>, chọn tệp 131 và/hoặc 331.</li><li>Bấm <b>Đọc tệp</b> — PDF scan khoảng 20–60 giây/trang (lần đầu tải bộ đọc ~8 MB).</li>
+        <h3>Cách dùng</h3><ol class="small"><li>Chọn <b>CIF</b> (KHHH đã có tự điền tên) + <b>CN</b>, chọn tệp 131 và/hoặc 331.</li><li>Bấm <b>Đọc tệp</b> — Excel đọc ngay (vài giây); PDF scan khoảng 20–60 giây/trang, bản mờ dễ sai chữ (lần đầu tải bộ đọc ~8 MB).</li>
         <li>② Soát dòng đỏ: 🖼 xem ảnh gốc, sửa ô.</li><li>③ Duyệt gợi ý gộp đối tác, kiểm/tra MST.</li><li>④ ${CN.store.canDirect() ? 'Lưu vào kho' : 'Gửi teamlead duyệt'}.</li></ol></div></div>`;
     // CIF: dữ liệu TPB trước (chuẩn); không có trong TPB → KHHH đã có trong kho
     $('npCif').onchange = async () => {
@@ -124,10 +124,19 @@
     if (isXlsx(file)) {
       await CNLoad.ensureXlsx();
       const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
-      for (const name of wb.SheetNames) {
-        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true });
+      const sheets = wb.SheetNames.map(name => ({ name, aoa: XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '', raw: true }) }));
+      for (const { aoa } of sheets) {
         const tpl = readTongHopTemplate(aoa);
         if (tpl) return tpl.map(g => newBatch(file, Object.assign({}, meta, { cn: meta.cn || g.cn, tenKH: g.tenKH || meta.tenKH }), [{ no: 1, header: { tk: g.tk, ky: /^\d{4}-\d\d-\d\d$/.test(g.ky) ? g.ky : null, kyGoc: g.ky }, rows: g.rows, total: null, warn: [] }]));
+      }
+      // Sổ tổng hợp công nợ xuất từ phần mềm kế toán: đọc theo cột tiêu đề (Nợ/Có × đầu kỳ/phát sinh/cuối kỳ) — mọi sheet có bảng
+      const xb = [];
+      sheets.forEach(({ name, aoa }) => (X131.parse(aoa, { fileName: file.name }) || []).forEach(g => {
+        if (g.rows.length) xb.push(Object.assign(newBatch(file, meta, [{ no: 1, sheet: name, header: g.header, rows: g.rows, total: g.total, warn: g.warn }]), { src: 'excel', sheet: name }));
+      }));
+      if (xb.length) return xb;
+      // dự phòng: bảng không nhận được tiêu đề cột → bố cục như OCR
+      for (const { name, aoa } of sheets) {
         const words = sheetToWords(aoa), L = P131.layout(words, { pageW: 6000 });
         if (L.colR.length < 6 || !L.rows.length) continue;
         P131.columnOffsets(L, words);
@@ -259,18 +268,22 @@
   const liveRows = () => N.batches.flatMap(b => b.rows.filter(r => !r.del && (r.ten || '').trim()).map(r => ({ b, r })));
   function buildAssign() {
     const uniq = new Map();
-    liveRows().forEach(({ b, r }) => { const raw = r.ten.trim(); if (!uniq.has(raw)) uniq.set(raw, { raw, n: 0, kh: new Set(), tk: new Set() }); const u = uniq.get(raw); u.n++; u.kh.add(b.tenKH); u.tk.add(b.tk); });
+    liveRows().forEach(({ b, r }) => { const raw = r.ten.trim(); if (!uniq.has(raw)) uniq.set(raw, { raw, n: 0, kh: new Set(), tk: new Set(), mst: '', caNhan: false }); const u = uniq.get(raw); u.n++; u.kh.add(b.tenKH); u.tk.add(b.tk); if (!u.mst && r.mstGoc) u.mst = r.mstGoc; if (r.caNhanGoc) u.caNhan = true; });
     const names = [...uniq.values()], K = kho(), thr = +(CN.store.S.data.config['Ngưỡng gợi ý gộp tên'] || 0.85);
-    const res = MAP131.assign(names.map(x => ({ raw: x.raw })), K, { suggest: thr });
+    // Mã ĐT trên sổ Excel có dạng MST → khớp đối tác trong kho theo MST trước khi so tên
+    const res = MAP131.assign(names.map(x => ({ raw: x.raw, mst: x.mst })), K, { suggest: thr });
     const prev = N.assign ? new Map(N.assign.map(a => [a.raw, a])) : new Map();
     N.assign = res.map((a, i) => {
-      const p = prev.get(a.raw), d = K.doiTac.find(x => x.id === a.id);
-      const base = Object.assign(a, { n: names[i].n, kh: [...names[i].kh], tk: [...names[i].tk], choice: a.kind === 'goi-y' ? 'new' : null, ten: d ? d.ten : a.raw, mst: d ? d.mst : '', ttMst: d ? d.ttMst : '', nguonMst: d ? d.nguonMst : '' });
+      const p = prev.get(a.raw), d = K.doiTac.find(x => x.id === a.id), nm = names[i];
+      const base = Object.assign(a, { n: nm.n, kh: [...nm.kh], tk: [...nm.tk], choice: a.kind === 'goi-y' ? 'new' : null, ten: d ? d.ten : a.raw, mst: d ? d.mst : '', ttMst: d ? d.ttMst : '', nguonMst: d ? d.nguonMst : '' });
+      if (!base.mst && nm.mst) { base.mst = nm.mst; base.nguonMst = MA_MST; base.maMst = nm.mst; }
+      if (nm.caNhan) base.caNhan = true;   // mã ĐT 12 số (CCCD) → cá nhân, không tra ngoài
       if (p) Object.assign(base, { choice: p.choice, ten: p.ten, tenSua: p.tenSua, tenNote: p.tenNote, mst: p.mst, ttMst: p.ttMst, nguonMst: p.nguonMst, mstCands: p.mstCands, intAuto: p.intAuto, intNone: p.intNone, cif: p.cif });
       return base;
     });
     N.intRun = false; N.intRes = null;   // danh sách tên đổi → tra nội bộ lại cho dòng chưa có MST
   }
+  const MA_MST = 'Mã ĐT trên sổ kế toán';
   const KIND = { alias: ['Tên gộp đã duyệt', 'ok'], mst: ['Trùng MST', 'ok'], 'trung-ten': ['Trùng tên chuẩn hóa', 'ok'], 'goi-y': ['Gợi ý — chờ duyệt', 'warn'], moi: ['Đối tác mới', 'info'], 'ca-nhan': ['Cá nhân? — không tra ngoài', 'warn'] };
   const finalId = a => (a.kind === 'goi-y' && a.choice && a.choice !== 'new' ? a.choice : a.id);
   const isExisting = a => !!CN.store.dtById(finalId(a));
@@ -381,7 +394,8 @@
     const fid = finalId(a), ex = isExisting(a), ca = a.caNhan || a.kind === 'ca-nhan', d = CN.store.dtById(fid);
     const sugg = a.kind === 'goi-y' ? `<div class="sugg">${a.cand.map(c => `<label><input type="radio" name="g${i}" value="${esc(c.id)}" ${a.choice === c.id ? 'checked' : ''}> Gộp vào ${CN.store.dtById(c.id) ? '<b>' + esc(c.id) + '</b> ' : ''}${esc(c.ten)} <small class="muted">(${CN.store.dtById(c.id) ? '' : 'đối tác mới trong lô này · '}${esc(c.why)})</small></label>`).join('')}<label><input type="radio" name="g${i}" value="new" ${a.choice === 'new' ? 'checked' : ''}> Giữ là đối tác mới</label></div>` : '';
     const mc = (a.mstCands || []).map((c, j) => `<div class="mc">${c.status && !/dang hoat dong|đang hoạt động/i.test(c.status) ? '⚠ ' : ''}${c.srcName ? chip('Nội bộ ' + Math.round(100 * c.score) + '%', c.score >= 0.86 ? 'ok' : 'gray') + ' ' : ''}<b>${esc(c.mst)}</b> ${esc(c.name)} <small class="muted">${esc(c.address || '')} ${esc(c.status || '')}</small> <button class="btn sm" data-act="pickMst" data-j="${j}">Chọn</button></div>`).join('');
-    const intChip = (a.intAuto && a.mst === a.intAuto.mst ? '<br>' + chip('MST tự điền (nội bộ ' + Math.round(100 * a.intAuto.score) + '%)', 'ok') : '')
+    const intChip = (a.maMst && a.mst === a.maMst && !a.ttMst ? '<br>' + chip('MST theo mã ĐT trên sổ — nên Kiểm MST', 'info') : '')
+      + (a.intAuto && a.mst === a.intAuto.mst ? '<br>' + chip('MST tự điền (nội bộ ' + Math.round(100 * a.intAuto.score) + '%)', 'ok') : '')
       + (a.cif ? '<br>' + chip('KH TPBank · CIF ' + a.cif.cif + (a.cif.via === 'cty-me' ? ' (cty mẹ)' : ''), 'ok') : '') + (a.intNone && !a.mst ? '<br>' + chip('Nội bộ không có', 'gray') : '');
     const st = a.ttMst ? `<div class="${/hoạt động/i.test(a.ttMst) && !/ngừng|tạm|bỏ địa chỉ|giải thể|không hoạt động/i.test(a.ttMst) ? 'okc' : 'errc'}"><small>${esc(a.ttMst)}${a.nguonMst ? ' · ' + esc(a.nguonMst) : ''}</small></div>` : '';
     return `<tr data-i="${i}"><td>${esc(a.raw)}${sugg}</td><td><small>${a.n} dòng · TK ${esc(a.tk.join('/'))}</small></td>
@@ -445,7 +459,7 @@
       p.aliases.push({ raw: a.raw, trangThai: a.kind === 'goi-y' ? 'Đã duyệt' : 'Máy gộp' });
     });
     const lots = N.batches.map(b => ({ cif: b.cif, tenKH: b.tenKH, mstKH: b.mstKH, cn: b.cn, tk: b.tk, ky: b.ky, kyGoc: b.kyGoc, file: b.file,
-      rows: b.rows.filter(r => !r.del && (r.ten || '').trim()).map(r => ({ ma: r.ma || '', raw: r.ten.trim(), cid: idOf.get(r.ten.trim()), vals: r.vals.map(v => v || 0), bal: r.bal === 'ok' ? 'Cân' : 'Chưa cân', trang: r.page || 1, ghiChu: r.edited ? 'Người sửa tay' : '' })) }));
+      rows: b.rows.filter(r => !r.del && (r.ten || '').trim()).map(r => ({ ma: r.ma || '', raw: r.ten.trim(), cid: idOf.get(r.ten.trim()), vals: r.vals.map(v => v || 0), bal: r.bal === 'ok' ? 'Cân' : 'Chưa cân', trang: r.page || 1, ghiChu: [r.tkCT && r.tkCT !== String(b.tk) ? 'TK ' + r.tkCT : '', r.edited ? 'Người sửa tay' : ''].filter(Boolean).join(' · ') })) }));
     return { lots, partners: [...parts.values()] };
   }
   function step4(box) {

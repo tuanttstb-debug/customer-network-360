@@ -9,7 +9,7 @@ Repo này theo chuẩn **AI OS Registry (Hub-and-Spoke)**. Tri thức dự án s
 
 ## Quy tắc làm việc
 - Việc nhỏ → commit nhỏ → cập nhật `AI_CONTEXT/` → `git push` (chỉ khi anh Tuân yêu cầu hoặc `/handover`).
-- **Gate trước push / clasp push:** `node test/gas.test.mjs` + `node test/model.test.mjs` + `node test/mst.test.mjs` + `node test/e2e.mjs` pass 100%.
+- **Gate trước push / clasp push:** `node test/gas.test.mjs` + `node test/model.test.mjs` + `node test/mst.test.mjs` + `node test/xlsx.test.mjs` + `node test/e2e.mjs` pass 100%.
 - **Kết thúc phiên:** delta `SESSION_HANDOVER.md` đủ 6 trường; cập nhật `PROJECT_STATE`/`TODO_NEXT`/`TECH_DEBT` nếu đổi.
 
 ## Dữ liệu (đọc kỹ — ngoại lệ data-boundary do anh Tuân duyệt 2026-10-13)
@@ -19,7 +19,7 @@ Repo này theo chuẩn **AI OS Registry (Hub-and-Spoke)**. Tri thức dự án s
 - Chỉ TK chủ mở file DB: `Guard.gs` gỡ chia sẻ khi setup + 7h hằng ngày. Không thêm endpoint đọc dữ liệu không cần token.
 
 ## Nguồn sự thật
-- **Lõi đọc 131–331** (`core/parse131|mapping|pipeline|ocr_core|deskew.js`): gốc ở AIOS `08_Work/W-2610-he-sinh-thai-131-331/tool/src/` — sửa ở gốc rồi chép sang (`02_Rules/cross-repo-workflow.md`). `gas/Mapping.gs` sinh từ `core/mapping.js` (`node tools/sync_gas.mjs`).
+- **Lõi đọc 131–331** (`core/parse131|mapping|pipeline|ocr_core|deskew.js`): gốc ở AIOS `08_Work/W-2610-he-sinh-thai-131-331/tool/src/` — sửa ở gốc rồi chép sang (`02_Rules/cross-repo-workflow.md`). `gas/Mapping.gs` sinh từ `core/mapping.js` (`node tools/sync_gas.mjs`). **Ngoại lệ:** `core/xlsx131.js` (đọc Excel theo cột, v0.4.1) gốc ở repo NÀY — đo trên tệp thật bằng `node tools/probe_xlsx.mjs "<tệp>"` (chỉ in số đếm).
 - **Công thức mô hình** = `assets/js/model.js` (port sheet 08–11 `CB_Ecosystem_360_TEMPLATE`, tham số = sheet Config). Khác template có chủ đích ghi ở đầu file.
 - **Quyền** kiểm ở server (`Auth.gs` `canDirect_`/`canApprove_`), FE chỉ ẩn/hiện.
 

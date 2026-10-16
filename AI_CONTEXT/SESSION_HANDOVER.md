@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-16 tối — CR anh Tuân: Excel là luồng nạp chính · v0.4.1, chỉ FE)
+- **Task completed:** bộ đọc Excel theo cột `core/xlsx131.js` thay đường "sheet → chữ OCR giả → bố cục" (giữ làm dự phòng) · mã ĐT dạng MST → điền sẵn MST + khớp đối tác theo MST (chip "MST theo mã ĐT trên sổ — nên Kiểm MST") · CCCD 12 số → cá nhân · TK con → Ghi chú dòng · gợi ý ① "ưu tiên Excel". Chẩn đoán "lỗi font" tệp Kho_DoiTac_…20261015: **không phải giao diện/xuất file** — chuỗi Unicode chuẩn NFC, 0 ký tự hỏng; 3 PDF nguồn là ảnh scan RICOH không có lớp chữ → sai chữ do **OCR bản mờ** (vd "CÔ PHÁN", đuôi rác "3”I", kỳ 2025 đọc thành 2015).
+- **Files changed:** `core/xlsx131.js` (mới) · `assets/js/views/nap.js` · `index.html` · `assets/js/config.js` (v0.4.1) · `test/xlsx.test.mjs` (mới, 26) · `test/e2e.mjs` (fixture 331 dạng sổ kế toán, +4) · `tools/probe_xlsx.mjs` (đo tệp thật, chỉ in số đếm) · `CLAUDE.md` (gate + ngoại lệ nguồn gốc xlsx131).
+- **Decision made:** `core/xlsx131.js` gốc ở repo này (không ở AIOS như parse131). MST lấy từ mã ĐT chỉ là gợi ý — người kiểm VietQR trước khi tin.
+- **Blocker:** không. Chưa có GAS đổi → không cần clasp deploy.
+- **Next step:** [TT] push → Pages · thử nạp 4 tệp ICV trên web (CIF 03735845) · [CC] thu thêm mẫu Excel phần mềm khác (MISA/FAST/Bravo) để mở rộng nhận tiêu đề.
+- **Regression risk:** thấp–TB — mọi tệp Excel nay qua bộ đọc mới trước (template tổng hợp vẫn ưu tiên đầu tiên); bảng không nhận tiêu đề → đường cũ. Test: GAS 60 · mô hình 34 · MST 85 · Excel 26 · E2E 64.
+
 ## Delta phiên (2026-10-16 chiều — KHHH chuẩn theo dữ liệu TPB · v0.4.0 · GAS @4→@7)
 - **Task completed:** bước ① tìm KH (CIF/MST server · tên trên máy) + tự điền · CN `001-HKM-Hoàn Kiếm` theo BLOCK.xlsx · lưu lô tự chuẩn hóa · "Chuẩn hóa KHHH" theo CIF→MST (đổi CIF dây chuyền) + nút chuẩn hóa ở chi tiết (2 tên · PTKD · loại ĐVKD · tỉnh) · xóa KHHH dọn đối tác mồ côi · màn chờ tải (hard reload) · tra KH 10–14 s → 2,3–4,2 s (putAll → put từng khóa; log_ không đọc cả NhatKy). Tuning tự điền MST thử rồi BỎ (đúng 100% → 99,2%). Lô Hương: từ chối + xóa KHHH 12345678 (anh làm); backup `CN360_DB_backup_20261016_truoc-xoa-lo-Huong`.
 - **Files changed:** `gas/{Mst,Service,Db,Code}.gs` · `assets/js/{app,config,mstidx}.js` · `views/{nap,khhh}.js` · `index.html` · `tools/build_mst_index.py` · test (GAS 60 · mô hình 34 · MST 85 · E2E 61). Build ngoài repo `D:\Công việc\USMN\Nen\_build\20261016-1401\`.
