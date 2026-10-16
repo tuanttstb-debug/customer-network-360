@@ -2,6 +2,14 @@
 
 Nợ kỹ thuật & hiện tượng lặp lại. Mới nhất trên cùng. ID: `TD-CN360-nn`.
 
+## TD-CN360-06 — Tên đẹp (có dấu) chỉ phủ 30% KH line CB (2026-10-16)
+**Hiện tượng:** 40.571/133.882 KH có MST trong sheet 900k → còn ~70% hiện `FULL_NAME` không dấu của TPB.
+**Hướng trả nợ:** [TT] tìm nguồn tên có dấu đầy đủ hơn (900k bản đủ) → build lại `tools/build_mst_index.py` (~7 phút). **Ưu tiên:** trung bình.
+
+## TD-CN360-05 — E2E chập chờn ở lần đăng nhập đầu (2026-10-16)
+**Hiện tượng:** `node test/e2e.mjs` thỉnh thoảng timeout 30 s ngay bước đăng nhập đầu (2 pass · 1 fail), chạy lại thì xanh (gặp 15/10 + 16/10).
+**Hướng trả nợ:** chờ `#app` hiện + tăng timeout bước đầu / retry 1 lần trong harness. **Ưu tiên:** thấp.
+
 ## TD-CN360-04 — Chỉ mục MST nội bộ TPBank trên Drive TK chủ + IndexedDB máy người dùng (2026-10-15)
 **Hiện tượng:** file nội bộ TPBank (tên + MST ~870k pháp nhân) để trên Drive TK cá nhân và tải về IndexedDB trình duyệt người dùng (ngoại lệ A4 "không lưu dữ liệu trên máy"); bảng MST→CIF chỉ GAS đọc.
 **Nguyên nhân:** anh ưu tiên tốc độ tra + trải nghiệm, chấp nhận bảo mật GG Sheet/Drive hiện tại, sẽ gỡ khi có cảnh báo (phỏng vấn 15/10).

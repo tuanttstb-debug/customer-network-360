@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-16 chiều — KHHH chuẩn theo dữ liệu TPB · v0.4.0 · GAS @4→@7)
+- **Task completed:** bước ① tìm KH (CIF/MST server · tên trên máy) + tự điền · CN `001-HKM-Hoàn Kiếm` theo BLOCK.xlsx · lưu lô tự chuẩn hóa · "Chuẩn hóa KHHH" theo CIF→MST (đổi CIF dây chuyền) + nút chuẩn hóa ở chi tiết (2 tên · PTKD · loại ĐVKD · tỉnh) · xóa KHHH dọn đối tác mồ côi · màn chờ tải (hard reload) · tra KH 10–14 s → 2,3–4,2 s (putAll → put từng khóa; log_ không đọc cả NhatKy). Tuning tự điền MST thử rồi BỎ (đúng 100% → 99,2%). Lô Hương: từ chối + xóa KHHH 12345678 (anh làm); backup `CN360_DB_backup_20261016_truoc-xoa-lo-Huong`.
+- **Files changed:** `gas/{Mst,Service,Db,Code}.gs` · `assets/js/{app,config,mstidx}.js` · `views/{nap,khhh}.js` · `index.html` · `tools/build_mst_index.py` · test (GAS 60 · mô hình 34 · MST 85 · E2E 61). Build ngoài repo `D:\Công việc\USMN\Nen\_build\20261016-1401\`.
+- **Decision made:** DEC-20261016-01 (AIOS) — CIF/CN theo TPB · MST + tên đẹp theo 900k · BLOCK cho ĐVKD; server là nguồn chuẩn khi lưu. Bộ MẪU không "chuẩn hóa" (không có KH thật tương ứng — 0/12 CIF/MST khớp).
+- **Blocker:** không. Tên đẹp chỉ 30% (TD-CN360-06).
+- **Next step:** [TT] tải chỉ mục `20261016-1401` → thử chuẩn hóa · chốt cách xóa 12 KHHH MẪU · nhắn Hương nạp lại bằng luồng mới. [CC] nếu chọn (b): nút "Xóa bộ MẪU".
+- **Regression risk:** trung bình — submit-batch ghi đè Tên/MST/CN theo TPB (đúng chủ đích) · đổi CIF chạm Lo/DoiTac (có test) · `log_` đổi cách ghi (appendRow) dùng ở mọi action. Đã verify prod: kh-find src=cache, xóa KHHH, chuẩn hóa ghi nhật ký.
+
 ## Delta phiên (2026-10-16 — sửa E2E MST → merge main → GAS @2 + Pages LIVE)
 - **Việc xong:** E2E MST timeout do `crypto.subtle` (kiểm sha256 3 tệp ở Danh mục) chỉ có trong secure context, trang test chạy `http://cn360.test` → test thêm cờ Chrome `--unsafely-treat-insecure-origin-as-secure` (prod https không bị, không sửa FE). Merge `wip/mst-noi-bo` → `main` `20e7693`, push; `clasp push` + anh chạy `clasp deploy -i … @2` (giữ URL); Pages phục vụ `mstidx.js` 200. CLAUDE.md: gate thêm `mst.test`, ghi ngoại lệ A4 IndexedDB.
 - **Files changed:** `test/e2e.mjs` (cờ launch) · `CLAUDE.md` · `AI_CONTEXT/{PROJECT_STATE,TODO_NEXT,SESSION_HANDOVER}.md`. Nhánh `wip/mst-noi-bo` đã xóa (local).
