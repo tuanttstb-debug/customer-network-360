@@ -21,6 +21,7 @@ var ACTIONS = {
   'mst-meta':       { fn: apiMstMeta_ },
   'mst-part':       { fn: apiMstPart_ },
   'mst-cif':        { fn: apiMstCif_ },
+  'kh-find':        { fn: apiKhFind_ },
   'sync-cif':       { fn: apiSyncCif_, write: true },
   'mst-upload':     { fn: apiMstUpload_, write: true },
   'mst-remove':     { fn: apiMstRemove_, write: true },

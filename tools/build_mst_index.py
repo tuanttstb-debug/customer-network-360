@@ -6,11 +6,13 @@
 
 Đầu ra (3 file → Admin tải lên ở web: Danh mục → MST nội bộ):
   name_index.tsv.gz  "MST<TAB>Tên"  — pháp nhân (sheet tra MST + KH line CB không có trong sheet đó), KHÔNG đánh dấu dòng nào là KH TPBank
-  cif_map.tsv.gz     "MST<TAB>CIF<TAB>BRN_MIS<TAB>CG_SEGMT"  — chỉ GAS đọc (không tải về trình duyệt)
+  cif_map.tsv.gz     "MST<TAB>CIF<TAB>BRN_MIS<TAB>CG_SEGMT" + khối cuối "K<TAB>CIF<TAB>MST<TAB>BRN<TAB>SEG<TAB>Tên<TAB>Tên chuẩn hóa"
+                     (toàn bộ KH line CB, cho ô tìm KHHH bước ①) — chỉ GAS đọc (không tải về trình duyệt)
   manifest.json      phiên bản · số dòng · sha256
 
 Bỏ cá nhân / hộ KD (MST 12 số) và MST sai định dạng (D: anh Tuân 2026-10-15).
-Chạy:  set PYTHONUTF8=1 && python tools/build_mst_index.py "D:\\Công việc\\USMN\\Nen\\TRA CUU MST.xlsx"
+Chạy:  set PYTHONUTF8=1 && python tools/build_mst_index.py "D:\\Công việc\\USMN\\Nen\\TRA CUU MST.xlsx" [thư mục ra] [BLOCK.xlsx]
+       BLOCK.xlsx mặc định ở thư mục cha của file nguồn → manifest.dvkd {"001": "001-HKM-Hoàn Kiếm", …}
 """
 import datetime as dt
 import gzip
@@ -20,11 +22,50 @@ import os
 import re
 import sys
 import time
+import unicodedata
 
 from openpyxl import load_workbook
 
 SHEET_MST = 'data mst 900l'
 SHEET_CB = 'KH line CB'
+SHEET_BLOCK = 'BLOCK 2026 (2)'   # BLOCK.xlsx — danh mục 148 ĐVKD (So_DVKD · Name_DKVD · Ma_DVKD)
+# Ghi chú sáp nhập (BLOCK.xlsx sheet BLOCK 2025): KH cũ vẫn gắn mã CN cũ trên CRS/GL023D
+MERGED = {'281': '202', '231': '230', '015': '046'}
+
+# Chuẩn hóa tên để tra KH (giống hệt khNorm_ trong gas/Mst.gs — sửa 2 nơi cùng lúc)
+KH_ABBR = [(' CONG TY ', ' CTY '), (' CTCP ', ' CTY CP '), (' CO PHAN ', ' CP '), (' TRACH NHIEM HUU HAN ', ' TNHH '),
+           (' MOT THANH VIEN ', ' MTV '), (' THUONG MAI ', ' TM '), (' DICH VU ', ' DV '), (' XAY DUNG ', ' XD '), (' SAN XUAT ', ' SX ')]
+
+
+def kh_norm(s):
+    s = unicodedata.normalize('NFD', str(s or '')).replace('đ', 'd').replace('Đ', 'D')
+    s = ''.join(ch for ch in s if unicodedata.category(ch) != 'Mn').upper()
+    s = ' ' + re.sub(r'[^A-Z0-9]+', ' ', s).strip() + ' '
+    for a, b in KH_ABBR:
+        while a in s:
+            s = s.replace(a, b)
+    return s.strip()
+
+
+def load_dvkd(path):
+    """BLOCK.xlsx → {'001': '001-HKM-Hoàn Kiếm', …} (bỏ tiền tố 'TPBank ')."""
+    if not os.path.exists(path):
+        raise SystemExit('Thiếu BLOCK.xlsx: ' + path)
+    ws = load_workbook(path, read_only=True, data_only=True)[SHEET_BLOCK]
+    rows = ws.iter_rows(values_only=True)
+    c = find_cols(next(rows), ['So_DVKD', 'Name_DKVD', 'Ma_DVKD'])
+    out = {}
+    for r in rows:
+        so = str(r[c['So_DVKD']] or '').strip()
+        if not so:
+            continue
+        so = so.zfill(3)
+        ten = re.sub(r'^TPBank\s+', '', str(r[c['Name_DKVD']] or '').strip())
+        out[so] = '%s-%s-%s' % (so, str(r[c['Ma_DVKD']] or '').strip(), ten)
+    for old, new in MERGED.items():
+        if old in out:
+            out[old] += ' (đã sáp nhập → %s)' % new
+    return out
 
 
 def norm_mst(v):
@@ -73,6 +114,7 @@ def main():
         raise SystemExit('Thư mục đầu ra nằm TRONG repo — cấm (dữ liệu nội bộ).')
     os.makedirs(out, exist_ok=True)
     t0 = time.time()
+    dvkd = load_dvkd(sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(src))), 'BLOCK.xlsx'))
     wb = load_workbook(src, read_only=True, data_only=True)
 
     names, skip1 = {}, 0
@@ -86,11 +128,15 @@ def main():
         names.setdefault(m, nm)
     n_s1 = len(names)
 
-    cif, skip2 = {}, 0
+    cif, skip2, kh = {}, 0, []
     rows = wb[SHEET_CB].iter_rows(values_only=True)
     c = find_cols(next(rows), ['CIF', 'FULL_NAME', 'BRN_MIS', 'CG_SEGMT', 'MST'])
     for r in rows:
         m = norm_mst(r[c['MST']])
+        k0, nm0 = str(r[c['CIF']] or '').strip(), clean_name(r[c['FULL_NAME']])
+        if k0:   # bảng KH line CB đủ dòng (kể cả chưa có MST) — chỉ GAS đọc, cho ô tìm KHHH ở bước ①
+            kh.append('\t'.join(['K', k0, m or '', str(r[c['BRN_MIS']] or '').strip().zfill(3),
+                                  str(r[c['CG_SEGMT']] or '').strip(), nm0, kh_norm(nm0)]))
         if not m:
             skip2 += 1
             continue
@@ -104,13 +150,16 @@ def main():
 
     name_lines = ['%s\t%s' % (m, n) for m, n in sorted(names.items())]
     cif_lines = ['%s\t%s\t%s\t%s' % (m, ','.join(e['cif']), e['brn'], e['seg']) for m, e in sorted(cif.items())]
+    n_cif = len(cif_lines)
+    cif_lines += ['# K\tCIF\tMST\tBRN\tSEG\tTên\tTên chuẩn hóa'] + kh   # khối KH ở CUỐI tệp (Mst.gs bỏ qua khi tra MST→CIF)
     f_name = write_gz(os.path.join(out, 'name_index.tsv.gz'), name_lines)
     f_cif = write_gz(os.path.join(out, 'cif_map.tsv.gz'), cif_lines)
     manifest = {
         'version': version, 'builtAt': dt.datetime.now().isoformat(timespec='seconds'), 'source': os.path.basename(src),
-        'counts': {'names': len(name_lines), 'fromMstSheet': n_s1, 'fromCbOnly': len(name_lines) - n_s1, 'cif': len(cif_lines),
-                   'skippedMstSheet': skip1, 'skippedCb': skip2},
+        'counts': {'names': len(name_lines), 'fromMstSheet': n_s1, 'fromCbOnly': len(name_lines) - n_s1, 'cif': n_cif, 'kh': len(kh),
+                   'dvkd': len(dvkd), 'skippedMstSheet': skip1, 'skippedCb': skip2},
         'files': {'name': f_name, 'cif': f_cif},
+        'dvkd': dvkd,
     }
     with open(os.path.join(out, 'manifest.json'), 'w', encoding='utf-8') as f:
         json.dump(manifest, f, ensure_ascii=False, indent=1)

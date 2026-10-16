@@ -24,8 +24,9 @@
   function step1(box) {
     const S = CN.store.S, M = N.meta;
     box.innerHTML = `<div class="grid g2"><div class="card"><h2>Nạp báo cáo 131 / 331 của 1 KHHH</h2>
+        <div class="fld"><span>Tìm KH trong dữ liệu nội bộ TPBank (CIF · MST · tên)</span><div class="row" style="margin-top:0"><input id="npKhQ" placeholder="VD: 12345678 · 0101234567 · Cty CP Xây dựng …" style="flex:1"><button class="btn" id="npKhGo">Tìm</button></div><div id="npKhRes" class="small"></div></div>
         <div class="grid g2"><label class="fld"><span>CIF KHHH *</span><input id="npCif" list="npKh" value="${esc(M.cif)}" placeholder="Gõ CIF hoặc chọn KHHH đã có"><datalist id="npKh">${S.data.khhh.map(k => `<option value="${esc(k.cif)}">${esc(k.ten)}</option>`).join('')}</datalist></label>
-          <label class="fld"><span>Tên CN (mã chữ) *</span><input id="npCn" value="${esc(M.cn)}" placeholder="VD: HCM, TDC…"></label></div>
+          <label class="fld"><span>CN (mã-tên ĐVKD) *</span><input id="npCn" value="${esc(M.cn)}" placeholder="VD: 001-HKM-Hoàn Kiếm"></label></div>
         <label class="fld" style="margin-top:8px"><span>Tên KHHH *</span><input id="npTen" value="${esc(M.tenKH)}" placeholder="Tên khách hàng đang vay"></label>
         <label class="fld" style="margin-top:8px"><span>MST KHHH</span><input id="npMst" value="${esc(M.mstKH)}"></label>
         <label class="fld" style="margin-top:8px"><span>Tệp 131/331 (PDF scan, ảnh, Excel — nhiều tệp cùng KHHH được)</span><input type="file" id="npFiles" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.xlsx,.xls,.csv"></label>
@@ -34,11 +35,46 @@
       <div class="card"><h2>Đang có trong phiên nạp</h2>${N.batches.length ? N.batches.map(b => `<div class="row" style="margin-top:4px">${chip(b.tk || '?', 'info')} <b>${esc(b.file)}</b> <span class="muted">${esc(b.tenKH)} · ${b.rows.length} dòng</span></div>`).join('') + '<div class="row"><button class="btn sm" id="npNext">Tiếp → ② Duyệt</button><button class="btn sm ghost" id="npReset">Bỏ hết, nạp lại</button></div>' : '<p class="muted">Chưa đọc tệp nào.</p>'}
         <h3>Cách dùng</h3><ol class="small"><li>Chọn <b>CIF</b> (KHHH đã có tự điền tên) + <b>CN</b>, chọn tệp 131 và/hoặc 331.</li><li>Bấm <b>Đọc tệp</b> — PDF scan khoảng 20–60 giây/trang (lần đầu tải bộ đọc ~8 MB).</li>
         <li>② Soát dòng đỏ: 🖼 xem ảnh gốc, sửa ô.</li><li>③ Duyệt gợi ý gộp đối tác, kiểm/tra MST.</li><li>④ ${CN.store.canDirect() ? 'Lưu vào kho' : 'Gửi teamlead duyệt'}.</li></ol></div></div>`;
-    $('npCif').onchange = () => { const k = CN.store.khByCif($('npCif').value.trim()); if (k) { $('npTen').value = k.ten || ''; $('npMst').value = k.mst || ''; if (!$('npCn').value) $('npCn').value = k.dvkd || ''; } };
+    $('npCif').onchange = () => {
+      const k = CN.store.khByCif($('npCif').value.trim());
+      if (k) { $('npTen').value = k.ten || ''; $('npMst').value = k.mst || ''; if (!$('npCn').value) $('npCn').value = k.dvkd || ''; }
+      else fillFromInternal().catch(() => {});
+    };
+    const khGo = async () => {
+      const q = $('npKhQ').value.trim(); if (!q) return;
+      $('npKhGo').disabled = true; $('npKhRes').innerHTML = '<span class="muted">Đang tìm trong dữ liệu nội bộ…</span>';
+      try {
+        const r = await khFind(q, 'Nạp ① (tìm)');
+        if (r === null) { $('npKhRes').innerHTML = '<span class="muted">Chưa có chỉ mục nội bộ (Admin tải lên ở Danh mục → MST nội bộ).</span>'; return; }
+        $('npKhRes').innerHTML = r.length ? `<div class="tblwrap"><table class="tbl" id="npKhTbl"><thead><tr><th>CIF</th><th>Tên KH</th><th>MST</th><th>CN</th><th></th></tr></thead><tbody>${r.map((k, i) => `<tr><td class="code">${esc(k.cif)}</td><td>${esc(k.ten)}</td><td class="code">${esc(k.mst || '—')}</td><td>${esc(k.cn)}</td><td><button class="btn sm" data-i="${i}">Chọn</button></td></tr>`).join('')}</tbody></table></div>${r.length >= 20 ? '<span class="muted">Chỉ hiện 20 KH đầu — gõ cụ thể hơn.</span>' : ''}` : '<span class="muted">Không thấy KH nào trong KH line CB.</span>';
+        $('npKhRes').querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { applyKh(r[+b.dataset.i], true); $('npKhRes').innerHTML = `<span class="muted">Đã chọn ${esc(r[+b.dataset.i].cif)} — ${esc(r[+b.dataset.i].ten)}.</span>`; });
+      } catch (e) { $('npKhRes').innerHTML = `<span class="muted">${esc(e.message)}</span>`; } finally { $('npKhGo').disabled = false; }
+    };
+    $('npKhGo').onclick = khGo; $('npKhQ').onkeydown = e => { if (e.key === 'Enter') khGo(); };
     if ($('npNext')) $('npNext').onclick = () => goStep(2);
     if ($('npReset')) $('npReset').onclick = () => { N.batches = []; N.assign = null; render($('view')); };
     $('npStop').onclick = () => { if (N.readCtx) N.readCtx.stop = true; $('npStatus').textContent = 'Đang dừng sau trang hiện tại…'; };
     $('npRead').onclick = readFiles;
+  }
+  /* Tra KHHH trong dữ liệu nội bộ (KH line CB — chỉ GAS đọc) → null nếu chưa có chỉ mục */
+  async function khFind(q, context) {
+    const r = await CN.net.call('kh-find', { q, context }, { timeoutMs: 90000 });
+    return r.version ? (r.items || []) : null;
+  }
+  /** Điền ô từ KH nội bộ; force=true (người bấm "Chọn") ghi đè, ngược lại chỉ điền ô trống. */
+  function applyKh(k, force) {
+    const set = (id, v) => { if (v && (force || !$(id).value.trim())) $(id).value = v; };
+    set('npCif', k.cif); set('npTen', k.ten); set('npMst', k.mst); set('npCn', k.cn);
+  }
+  /** Trước khi đọc tệp: còn ô trống → tra nốt theo CIF (đúng 1 KH) rồi MST. Không chặn khi lỗi mạng/chưa có chỉ mục. */
+  async function fillFromInternal() {
+    const cif = $('npCif').value.trim(), mst = $('npMst').value.trim();
+    if ($('npCif').value.trim() && $('npTen').value.trim() && $('npMst').value.trim() && $('npCn').value.trim()) return;
+    for (const q of [cif, mst]) {
+      if (!q || q.length < 3) continue;
+      const r = await khFind(q, 'Nạp ① (tự điền)');
+      if (r && r.length === 1) { applyKh(r[0], false); return r[0]; }
+    }
   }
   const isXlsx = f => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name), isPdf = f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
   const dstr = v => { if (v instanceof Date) { const d = new Date(v.getTime() - v.getTimezoneOffset() * 60000); return d.toISOString().slice(0, 10); } return String(v || '').slice(0, 10); };
@@ -116,6 +152,7 @@
   }
   async function readFiles() {
     const files = [...$('npFiles').files];
+    try { $('npRead').disabled = true; $('npStatus').textContent = 'Đang tra nốt thông tin KHHH nội bộ…'; await fillFromInternal(); } catch (e) { /* không chặn nạp */ } finally { $('npRead').disabled = false; $('npStatus').textContent = ''; }
     N.meta = { cn: $('npCn').value.trim(), cif: $('npCif').value.trim(), tenKH: $('npTen').value.trim(), mstKH: $('npMst').value.trim() };
     const miss = []; if (!N.meta.cif) miss.push('CIF KHHH'); if (!N.meta.cn) miss.push('Tên CN'); if (!N.meta.tenKH) miss.push('Tên KHHH'); if (!files.length) miss.push('tệp 131/331');
     if (miss.length) { $('npMsg').innerHTML = '<div class="alert warn">Cần nhập: ' + miss.join(', ') + '.</div>'; return; }

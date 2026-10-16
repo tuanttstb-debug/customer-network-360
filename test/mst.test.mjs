@@ -144,6 +144,33 @@ ok(call('u_mn', 'sync-cif', { reqId: 'S4' }).error === 'FORBIDDEN', 'User đối
 const sy = call('tl_mn', 'sync-cif', { reqId: 'S5' }).data;
 ok(sy.updated === 1 && E.db().table('DoiTac').find(d => d['MST'] === '0100000001')['CIF (nếu là KH TP)'] === '90000001', 'Teamlead đối chiếu CIF → điền lại 1 đối tác');
 
+console.log('— Tìm KHHH nội bộ (khối K trong tệp CIF) + mã CN theo BLOCK');
+{
+  const CIFK = CIF + '# K\tCIF\tMST\tBRN\tSEG\tTên\tTên chuẩn hóa\n'
+    + 'K\t90000001\t0100000001\t001\t110000\tCÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT\tCTY CP XD GIA LAP MOT\n'
+    + 'K\t90000006\t0100000006\t015\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU\tCTY TNHH THEP GIA SAU\n'
+    + 'K\t90000007\t0100000006\t002\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU (HĐ CŨ)\tCTY TNHH THEP GIA SAU HD CU\n'
+    + 'K\t90000008\t\t001\t110000\tCÔNG TY TNHH CHƯA CÓ MST GIẢ\tCTY TNHH CHUA CO MST GIA\n';
+  const P3 = pack('20261016-0900', tsv, CIFK, 50000);
+  P3.manifest.dvkd = { '001': '001-HKM-Hoàn Kiếm', '015': '015-TTKD_LTT-TTKD Lê Trọng Tấn (đã sáp nhập → 046)', 'x1': 'bỏ' };
+  ok(upload('admin1', P3).every(x => x.status === 'ok'), 'tải lên bản có khối KH + bảng ĐVKD');
+  ok(call('u_mn', 'mst-cif', { msts: ['0100000001'] }).data.map['0100000001'].cif === '90000001', 'khối K không làm hỏng tra MST→CIF');
+  const f1 = call('u_mn', 'kh-find', { q: '90000001', context: 'test' }).data.items;
+  ok(f1.length === 1 && f1[0].mst === '0100000001' && f1[0].cn === '001-HKM-Hoàn Kiếm' && /GIẢ LẬP MỘT/.test(f1[0].ten), 'CIF → đúng 1 KH + MST + CN "001-HKM-Hoàn Kiếm"');
+  const f2 = call('u_mn', 'kh-find', { q: '0100000006' }).data.items;
+  ok(f2.length === 2 && f2.map(x => x.cif).sort().join() === '90000006,90000007', 'MST → mọi CIF của MST đó');
+  ok(f2.find(x => x.cif === '90000007').cn === '002 (ngoài BLOCK 2026)' && /sáp nhập → 046/.test(f2.find(x => x.cif === '90000006').cn), 'mã CN ngoài BLOCK / đã sáp nhập hiện rõ');
+  const f3 = call('u_mn', 'kh-find', { q: 'Cty CP Xay dung Gia Lap Mot' }).data.items;
+  ok(f3.length === 1 && f3[0].cif === '90000001', 'tên viết tắt, không dấu → tìm được');
+  const f4 = call('u_mn', 'kh-find', { q: 'thép giả sáu' }).data.items;
+  ok(f4.length === 2 && f4[0].cif === '90000006', 'tên → nhiều KH, tên ngắn (khớp sát) trước');
+  ok(call('u_mn', 'kh-find', { q: '90000008' }).data.items[0].mst === '', 'KH chưa có MST vẫn tìm được theo CIF');
+  ok(call('u_mn', 'kh-find', { q: 'ab' }).status === 'error', '< 3 ký tự → lỗi');
+  ok(E.call({ action: 'kh-find', q: '90000001' }).error === 'AUTH_REQUIRED', 'kh-find không token → AUTH_REQUIRED');
+  ok(E.db().table('NhatKy').some(r => r['Hành động'] === 'Tìm KHHH nội bộ'), 'nhật ký: tìm KHHH nội bộ');
+  ok(!E.ctx.mstManifest_().dvkd.x1, 'manifest: chỉ nhận mã ĐVKD 3 số');
+}
+
 console.log('— Thay phiên bản · bảo vệ · gỡ');
 const P2 = pack('20261101-0900', tsv.replace('GIẢ BA', 'GIẢ BA MỚI'), CIF, 50000);
 ok(upload('admin1', P2).every(x => x.status === 'ok'), 'tải lên phiên bản mới');

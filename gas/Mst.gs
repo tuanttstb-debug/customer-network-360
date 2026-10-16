@@ -67,7 +67,7 @@ function _cifBuckets_(m, keys) {
     var text = Utilities.ungzip(Utilities.newBlob(f.getBlob().getBytes(), 'application/x-gzip')).getDataAsString('UTF-8');
     var all = {};
     text.split('\n').forEach(function (line) {
-      if (!line || line.charAt(0) === '#') return;
+      if (!line || line.charAt(0) === '#' || line.charAt(0) === 'K') return;   // khối K = bảng KH (kh-find), không vào bucket
       var k = line.split('\t')[0], b = 'cif:' + m.version + ':' + _cifBucket_(k);
       all[b] = (all[b] || '') + line + '\n';
     });
@@ -111,6 +111,61 @@ function apiMstCif_(u, body) {
   if (r === null) return { version: null, map: {} };
   withLock_(function () { log_(u, 'Tra CIF nội bộ', str_(body.context).slice(0, 80), msts.length + ' MST · ' + Object.keys(r).length + ' có CIF'); });
   return { version: mstManifest_().version, map: r };
+}
+
+/* ---------- Tìm KHHH theo CIF / MST / tên (ô tìm ở bước ① Nạp dữ liệu) — chỉ server ---------- */
+var KH_FIND_MAX = 20;
+// Giống hệt kh_norm trong tools/build_mst_index.py — sửa 2 nơi cùng lúc
+var KH_ABBR = [[' CONG TY ', ' CTY '], [' CTCP ', ' CTY CP '], [' CO PHAN ', ' CP '], [' TRACH NHIEM HUU HAN ', ' TNHH '],
+  [' MOT THANH VIEN ', ' MTV '], [' THUONG MAI ', ' TM '], [' DICH VU ', ' DV '], [' XAY DUNG ', ' XD '], [' SAN XUAT ', ' SX ']];
+var KH_STOP = { CTY: 1, CP: 1, TNHH: 1, MTV: 1 };
+function khNorm_(s) {
+  s = str_(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toUpperCase();
+  s = ' ' + s.replace(/[^A-Z0-9]+/g, ' ').trim() + ' ';
+  KH_ABBR.forEach(function (p) { while (s.indexOf(p[0]) >= 0) s = s.split(p[0]).join(p[1]); });
+  return s.trim();
+}
+/** Mã BRN_MIS → "001-HKM-Hoàn Kiếm" theo BLOCK.xlsx (manifest.dvkd); không có → "002 (ngoài BLOCK 2026)". */
+function dvkdLabel_(m, brn) {
+  var b = str_(brn); if (!b) return '';
+  var d = (m && m.dvkd) || {};
+  return d[b] || (b + ' (ngoài BLOCK 2026)');
+}
+var _khMem_ = null;
+function _khText_(m) {
+  if (_khMem_ && _khMem_.v === m.version) return _khMem_.t;
+  var f = mstFile_(mstFolder_(false), m.version + '.cif');
+  if (!f) throw new Error('Thiếu file CIF của chỉ mục ' + m.version + '.');
+  var text = Utilities.ungzip(Utilities.newBlob(f.getBlob().getBytes(), 'application/x-gzip')).getDataAsString('UTF-8');
+  var p = text.indexOf('\nK\t');
+  _khMem_ = { v: m.version, t: p < 0 ? '' : text.slice(p) + (text.charAt(text.length - 1) === '\n' ? '' : '\n') };
+  return _khMem_.t;
+}
+/** q = CIF | MST | tên → ≤ 20 KH {cif, mst, ten, brn, cn, seg}. CIF/MST: khớp đúng; tên: đủ mọi từ (bỏ CTY/CP/TNHH/MTV), tên ngắn trước. */
+function khFind_(m, q) {
+  var t = _khText_(m), out = [], raw = str_(q).trim(), dig = raw.replace(/\D/g, '');
+  var row = function (line) { var e = line.split('\t'); return { cif: e[1], mst: e[2], brn: e[3], cn: dvkdLabel_(m, e[3]), seg: e[4], ten: e[5], _k: e[6] || '' }; };
+  var each = function (fn) { var a = 1, b; while (a < t.length && out.length < 500) { b = t.indexOf('\n', a); if (b < 0) b = t.length; if (fn(t.slice(a, b))) out.push(row(t.slice(a, b))); a = b + 1; } };
+  if (dig && dig === raw.replace(/[\s.\-]/g, '')) {
+    var key = _mstKey_(raw), byMst = key && (dig.length === 10 || dig.length === 13);
+    each(function (l) { var e = l.split('\t', 3); return byMst ? e[2] === key : e[1] === dig; });
+    if (!out.length && byMst) each(function (l) { return l.split('\t', 2)[1] === dig; });   // CIF trùng độ dài MST
+  } else {
+    var toks = khNorm_(raw).split(' ').filter(function (w) { return w && !KH_STOP[w]; });
+    if (!toks.length) return [];
+    each(function (l) { var k = ' ' + l.slice(l.lastIndexOf('\t') + 1) + ' '; return toks.every(function (w) { return k.indexOf(' ' + w + ' ') >= 0; }); });
+    out.sort(function (a, b) { return a._k.length - b._k.length; });
+  }
+  return out.slice(0, KH_FIND_MAX).map(function (x) { delete x._k; return x; });
+}
+function apiKhFind_(u, body) {
+  var m = mstManifest_();
+  if (!m) return { version: null, items: [] };
+  var q = str_(body.q).trim();
+  if (q.length < 3) throw new Error('Gõ ít nhất 3 ký tự (CIF, MST hoặc tên KH).');
+  var items = khFind_(m, q);
+  withLock_(function () { log_(u, 'Tìm KHHH nội bộ', str_(body.context).slice(0, 80), q.slice(0, 60) + ' → ' + items.length + ' KH'); });
+  return { version: m.version, items: items };
 }
 
 var DT_CIF_COL = 'CIF (nếu là KH TP)';
@@ -171,7 +226,8 @@ function apiMstUpload_(u, body) {
   if (!mstFile_(folder, v + '.cif')) throw new Error('Thiếu file CIF.');
   // sha256 toàn file (của bản build) — trình duyệt kiểm lại sau khi tải về
   var out = { version: v, builtAt: str_(man.builtAt), source: str_(man.source), counts: man.counts || {}, uploadedAt: nowIso_(), uploadedBy: u.username,
-              name: { parts: parts, bytes: size, sha256: str_(man.files.name.sha256) } };
+              name: { parts: parts, bytes: size, sha256: str_(man.files.name.sha256) }, dvkd: {} };
+  Object.keys(man.dvkd || {}).slice(0, 1000).forEach(function (k) { if (/^\d{3}$/.test(k)) out.dvkd[k] = str_(man.dvkd[k]).slice(0, 120); });
   var old = folder.getFilesByName('manifest.json'); while (old.hasNext()) old.next().setTrashed(true);
   folder.createFile(Utilities.newBlob(JSON.stringify(out), 'application/json', 'manifest.json'));
   // Bỏ file phiên bản cũ

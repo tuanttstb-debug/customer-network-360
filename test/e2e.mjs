@@ -264,10 +264,12 @@ try {
     const lines = ['# MST\tTên'];
     for (let i = 0; i < 3000; i++) lines.push(`${2000000000 + i}\tCÔNG TY TNHH ${L[i % 4]} ${W[i % 10]} ${W[(i * 7) % 10]} ${W[(i * 3) % 10]} ${i}`);
     lines.push('0101234567\tCÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT', '0102222221\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI', '0102222222\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI');
-    const nameGz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n')), cifGz = zlib.gzipSync(Buffer.from('# MST\tCIF\tBRN\tSEG\n0101234567\t77700001\t101\t110000\n'));
+    const nameGz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n')), cifGz = zlib.gzipSync(Buffer.from('# MST\tCIF\tBRN\tSEG\n0101234567\t77700001\t101\t110000\n# K\tCIF\tMST\tBRN\tSEG\tTên\tTên chuẩn hóa\n'
+      + 'K\t77700001\t0101234567\t001\t110000\tCÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT\tCTY TNHH XD GIA LAP MOT\nK\t77700002\t0109990002\t002\t110000\tCÔNG TY CP KHHH GIẢ HAI\tCTY CP KHHH GIA HAI\n'));
     const sha = b => crypto.createHash('sha256').update(b).digest('hex');
     const man = { version: '20261015-1800', builtAt: '2026-10-15T18:00:00', source: 'gia_lap.xlsx', counts: { names: lines.length - 1, cif: 1 },
-      files: { name: { file: 'name_index.tsv.gz', bytes: nameGz.length, sha256: sha(nameGz) }, cif: { file: 'cif_map.tsv.gz', bytes: cifGz.length, sha256: sha(cifGz) } } };
+      files: { name: { file: 'name_index.tsv.gz', bytes: nameGz.length, sha256: sha(nameGz) }, cif: { file: 'cif_map.tsv.gz', bytes: cifGz.length, sha256: sha(cifGz) } },
+      dvkd: { '001': '001-HKM-Hoàn Kiếm' } };
     const D = path.join(TMP, 'mst_build'); fs.mkdirSync(D);
     fs.writeFileSync(path.join(D, 'manifest.json'), JSON.stringify(man)); fs.writeFileSync(path.join(D, 'name_index.tsv.gz'), nameGz); fs.writeFileSync(path.join(D, 'cif_map.tsv.gz'), cifGz);
     const pM = await newPage(env3); await login(pM, 'admin1', 'a');
@@ -287,6 +289,15 @@ try {
     await shot(pM, '10_mst_noi_bo');
 
     await go(pM, '#/nap');
+    await pM.type('#npKhQ', 'cty cp khhh gia hai'); await pM.click('#npKhGo');
+    await pM.waitForSelector('#npKhTbl button', { timeout: 30000 }); await pM.click('#npKhTbl button');
+    const f1 = await pM.evaluate(() => ['npCif', 'npTen', 'npMst', 'npCn'].map(id => document.getElementById(id).value));
+    ok(f1.join('|') === '77700002|CÔNG TY CP KHHH GIẢ HAI|0109990002|002 (ngoài BLOCK 2026)', '① tìm KH nội bộ theo tên → Chọn → điền CIF · tên · MST · CN');
+    await go(pM, '#/danh-muc'); await go(pM, '#/nap');
+    await pM.type('#npCif', '77700001'); await (await pM.$('#npFiles')).uploadFile(XL); await pM.click('#npRead'); await pM.waitForSelector('.batch', { timeout: 60000 });
+    const f2 = await pM.evaluate(() => CN.views.nap._state.batches[0]);
+    ok(f2.tenKH === 'CÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT' && f2.mstKH === '0101234567' && f2.cn === '001-HKM-Hoàn Kiếm', '① chỉ gõ CIF → bấm Đọc tệp tự tra nốt tên · MST · CN "001-HKM-Hoàn Kiếm"');
+    await pM.evaluate(() => Object.assign(CN.views.nap._state, { batches: [], assign: null, step: 1, meta: { cn: '', cif: '', tenKH: '', mstKH: '' } })); await go(pM, '#/danh-muc'); await go(pM, '#/nap');
     await pM.type('#npCif', '900009'); await pM.type('#npCn', 'HCM'); await pM.type('#npTen', 'KHHH GIẢ LẬP CHÍN');
     await (await pM.$('#npFiles')).uploadFile(XL);
     await pM.click('#npRead'); await pM.waitForSelector('.batch');
@@ -299,6 +310,7 @@ try {
     ok(/tự điền 1/.test(await text(pM, '#npInt')) && /KH TPBank \(CIF\)/.test(await text(pM, '#npInt')), 'dòng trạng thái: số tự điền + số đối tác là KH TPBank');
     ok(/KH TPBank · CIF 77700001/.test(await text(pM, 'tr[data-i="0"]')), 'chip "KH TPBank · CIF" trên dòng đối tác');
     await shot(pM, '11_nap_mst_noi_bo');
+    await pM.waitForFunction(() => !document.querySelector('.toast'), { timeout: 15000 });   // toast "Đã đọc…" che nút
     await pM.click('#npToSave'); await pM.waitForSelector('#npSave');
     await pM.click('#npSave'); await pM.waitForFunction(() => window.__lastSubmit && location.hash.startsWith('#/khach-hang/'), { timeout: 30000 }); await idle(pM);
     const d1 = env3.db().table('DoiTac').find(d => d['MST'] === '0101234567');
@@ -320,7 +332,7 @@ try {
   ok(ext.length === 0, 'không có request nào ra ngoài GAS/VietQR (giả lập)' + (ext.length ? ': ' + [...new Set(ext)].slice(0, 5).join(' | ') : ''));
   ok(csp.length === 0, 'không vi phạm CSP' + (csp.length ? ': ' + csp.slice(0, 3).join(' | ') : ''));
   ok(errs.length === 0, 'không lỗi JS' + (errs.length ? ': ' + errs.slice(0, 5).join(' | ') : ''));
-} catch (e) { fail++; console.error('  ✗ LỖI', e); }
+} catch (e) { fail++; console.error('  ✗ LỖI', e.message, errs.length ? '\n    lỗi JS trang: ' + errs.slice(0, 5).join(' | ') : ''); }
 finally { await browser.close(); fs.rmSync(TMP, { recursive: true, force: true }); }
 console.log(`E2E: ${pass} pass · ${fail} fail`);
 process.exit(fail ? 1 : 0);
