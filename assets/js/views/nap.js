@@ -35,16 +35,18 @@
       <div class="card"><h2>Đang có trong phiên nạp</h2>${N.batches.length ? N.batches.map(b => `<div class="row" style="margin-top:4px">${chip(b.tk || '?', 'info')} <b>${esc(b.file)}</b> <span class="muted">${esc(b.tenKH)} · ${b.rows.length} dòng</span></div>`).join('') + '<div class="row"><button class="btn sm" id="npNext">Tiếp → ② Duyệt</button><button class="btn sm ghost" id="npReset">Bỏ hết, nạp lại</button></div>' : '<p class="muted">Chưa đọc tệp nào.</p>'}
         <h3>Cách dùng</h3><ol class="small"><li>Chọn <b>CIF</b> (KHHH đã có tự điền tên) + <b>CN</b>, chọn tệp 131 và/hoặc 331.</li><li>Bấm <b>Đọc tệp</b> — PDF scan khoảng 20–60 giây/trang (lần đầu tải bộ đọc ~8 MB).</li>
         <li>② Soát dòng đỏ: 🖼 xem ảnh gốc, sửa ô.</li><li>③ Duyệt gợi ý gộp đối tác, kiểm/tra MST.</li><li>④ ${CN.store.canDirect() ? 'Lưu vào kho' : 'Gửi teamlead duyệt'}.</li></ol></div></div>`;
-    $('npCif').onchange = () => {
+    // CIF: dữ liệu TPB trước (chuẩn); không có trong TPB → KHHH đã có trong kho
+    $('npCif').onchange = async () => {
+      let hit = null; try { hit = await fillFromInternal(); } catch (e) { /* mạng lỗi → dùng kho */ }
+      if (hit) return;
       const k = CN.store.khByCif($('npCif').value.trim());
       if (k) { $('npTen').value = k.ten || ''; $('npMst').value = k.mst || ''; if (!$('npCn').value) $('npCn').value = k.dvkd || ''; }
-      else fillFromInternal().catch(() => {});
     };
     const khGo = async () => {
       const q = $('npKhQ').value.trim(); if (!q) return;
       $('npKhGo').disabled = true; $('npKhRes').innerHTML = '<span class="muted">Đang tìm trong dữ liệu nội bộ…</span>';
       try {
-        const r = await khFind(q, 'Nạp ① (tìm)');
+        const r = await khFind(q, 'Nạp ① (tìm)', m => { $('npKhRes').innerHTML = `<span class="muted">${esc(m)}</span>`; });
         if (r === null) { $('npKhRes').innerHTML = '<span class="muted">Chưa có chỉ mục nội bộ (Admin tải lên ở Danh mục → MST nội bộ).</span>'; return; }
         $('npKhRes').innerHTML = r.length ? `<div class="tblwrap"><table class="tbl" id="npKhTbl"><thead><tr><th>CIF</th><th>Tên KH</th><th>MST</th><th>CN</th><th></th></tr></thead><tbody>${r.map((k, i) => `<tr><td class="code">${esc(k.cif)}</td><td>${esc(k.ten)}</td><td class="code">${esc(k.mst || '—')}</td><td>${esc(k.cn)}</td><td><button class="btn sm" data-i="${i}">Chọn</button></td></tr>`).join('')}</tbody></table></div>${r.length >= 20 ? '<span class="muted">Chỉ hiện 20 KH đầu — gõ cụ thể hơn.</span>' : ''}` : '<span class="muted">Không thấy KH nào trong KH line CB.</span>';
         $('npKhRes').querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { applyKh(r[+b.dataset.i], true); $('npKhRes').innerHTML = `<span class="muted">Đã chọn ${esc(r[+b.dataset.i].cif)} — ${esc(r[+b.dataset.i].ten)}.</span>`; });
@@ -56,25 +58,34 @@
     $('npStop').onclick = () => { if (N.readCtx) N.readCtx.stop = true; $('npStatus').textContent = 'Đang dừng sau trang hiện tại…'; };
     $('npRead').onclick = readFiles;
   }
-  /* Tra KHHH trong dữ liệu nội bộ (KH line CB — chỉ GAS đọc) → null nếu chưa có chỉ mục */
-  async function khFind(q, context) {
-    const r = await CN.net.call('kh-find', { q, context }, { timeoutMs: 90000 });
-    return r.version ? (r.items || []) : null;
+  /* Tra KHHH trong dữ liệu nội bộ (KH line CB — CIF chỉ GAS đọc). CIF/MST → server; TÊN → chỉ mục tên→MST trên máy
+   * (tên đẹp sheet 900k) rồi hỏi server MST nào là KH TPBank. → null nếu chưa có chỉ mục. */
+  const digitsOnly = q => { const d = String(q || '').replace(/[\s.\-]/g, ''); return /^\d{3,}$/.test(d) ? d : ''; };
+  async function khFind(q, context, onStatus) {
+    if (digitsOnly(q)) { const r = await CN.net.call('kh-find', { q, context }, { timeoutMs: 90000 }); return r.version ? (r.items || []) : null; }
+    const off = onStatus ? CN.mstidx.on(st => onStatus(st.msg)) : null;
+    try {
+      const res = await CN.mstidx.search([q], null, context, 15);
+      if (res === null) return null;
+      const msts = res[0].cands.map(c => c.mst);
+      if (!msts.length) return [];
+      const r = await CN.net.call('kh-find', { msts, context }, { timeoutMs: 90000 });
+      return r.items || [];
+    } finally { if (off) off(); }
   }
-  /** Điền ô từ KH nội bộ; force=true (người bấm "Chọn") ghi đè, ngược lại chỉ điền ô trống. */
-  function applyKh(k, force) {
-    const set = (id, v) => { if (v && (force || !$(id).value.trim())) $(id).value = v; };
+  /** Điền ô từ KH nội bộ. Dữ liệu TPB là chuẩn → ghi đè (server cũng chuẩn hóa lại khi lưu). */
+  function applyKh(k) {
+    const set = (id, v) => { if (v) $(id).value = v; };
     set('npCif', k.cif); set('npTen', k.ten); set('npMst', k.mst); set('npCn', k.cn);
   }
-  /** Trước khi đọc tệp: còn ô trống → tra nốt theo CIF (đúng 1 KH) rồi MST. Không chặn khi lỗi mạng/chưa có chỉ mục. */
+  /** Theo CIF đang nhập: có trong dữ liệu TPB → điền chuẩn; không → giữ ô người nhập. Không chặn khi lỗi mạng/chưa có chỉ mục. */
   async function fillFromInternal() {
-    const cif = $('npCif').value.trim(), mst = $('npMst').value.trim();
-    if ($('npCif').value.trim() && $('npTen').value.trim() && $('npMst').value.trim() && $('npCn').value.trim()) return;
-    for (const q of [cif, mst]) {
-      if (!q || q.length < 3) continue;
-      const r = await khFind(q, 'Nạp ① (tự điền)');
-      if (r && r.length === 1) { applyKh(r[0], false); return r[0]; }
-    }
+    const cif = digitsOnly($('npCif').value);
+    if (!cif) return null;
+    const r = await khFind(cif, 'Nạp ① (tự điền)');
+    const k = r && r.find(x => x.cif === cif);
+    if (k) applyKh(k);
+    return k || null;
   }
   const isXlsx = f => /\.(xlsx|xlsm|xls|csv)$/i.test(f.name), isPdf = f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name);
   const dstr = v => { if (v instanceof Date) { const d = new Date(v.getTime() - v.getTimezoneOffset() * 60000); return d.toISOString().slice(0, 10); } return String(v || '').slice(0, 10); };

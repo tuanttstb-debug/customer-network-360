@@ -24,7 +24,9 @@
   $('btnTheme').onclick = () => theme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
   theme();
 
+  const dropSplash = () => { const sp = document.getElementById('bootSplash'); if (sp) sp.remove(); };
   function showLogin(msg) {
+    dropSplash();
     $('app').style.display = 'none'; $('loginOverlay').style.display = '';
     $('lgErr').style.display = msg ? '' : 'none'; $('lgErr').textContent = msg || '';
     setTimeout(() => $('lgUser').focus(), 50);
@@ -73,7 +75,7 @@
   $('verBadge').textContent = 'CN360 ' + CN.CONFIG.VERSION;
 
   async function start() {
-    $('loginOverlay').style.display = 'none'; $('app').style.display = '';
+    dropSplash(); $('loginOverlay').style.display = 'none'; $('app').style.display = '';
     CN.ui.busy(true, 'Đang tải dữ liệu…');
     try { await CN.store.load(); window.__cnReady = true; await route(); }
     catch (err) { if (err.code !== 'AUTH_REQUIRED') { $('view').innerHTML = `<div class="alert err">Không tải được dữ liệu: ${esc(err.message)} <button class="btn sm" id="retry">Thử lại</button></div>`; $('retry').onclick = () => start(); } }

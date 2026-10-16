@@ -144,32 +144,49 @@ ok(call('u_mn', 'sync-cif', { reqId: 'S4' }).error === 'FORBIDDEN', 'User đối
 const sy = call('tl_mn', 'sync-cif', { reqId: 'S5' }).data;
 ok(sy.updated === 1 && E.db().table('DoiTac').find(d => d['MST'] === '0100000001')['CIF (nếu là KH TP)'] === '90000001', 'Teamlead đối chiếu CIF → điền lại 1 đối tác');
 
-console.log('— Tìm KHHH nội bộ (khối K trong tệp CIF) + mã CN theo BLOCK');
+console.log('— KHHH nội bộ (khối K trong tệp CIF): tìm theo CIF/MST/ứng viên tên · mã CN theo BLOCK · chuẩn hóa khi lưu');
 {
-  const CIFK = CIF + '# K\tCIF\tMST\tBRN\tSEG\tTên\tTên chuẩn hóa\n'
-    + 'K\t90000001\t0100000001\t001\t110000\tCÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT\tCTY CP XD GIA LAP MOT\n'
-    + 'K\t90000006\t0100000006\t015\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU\tCTY TNHH THEP GIA SAU\n'
-    + 'K\t90000007\t0100000006\t002\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU (HĐ CŨ)\tCTY TNHH THEP GIA SAU HD CU\n'
-    + 'K\t90000008\t\t001\t110000\tCÔNG TY TNHH CHƯA CÓ MST GIẢ\tCTY TNHH CHUA CO MST GIA\n';
+  const CIFK = CIF + '# K\tCIF\tMST\tBRN\tSEG\tTên\n'
+    + 'K\t90000001\t0100000001\t001\t110000\tCÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT\n'
+    + 'K\t90000006\t0100000006\t015\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU\n'
+    + 'K\t90000007\t0100000006\t002\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU (HĐ CŨ)\n'
+    + 'K\t90000008\t\t001\t110000\tCÔNG TY TNHH CHƯA CÓ MST GIẢ\n';
   const P3 = pack('20261016-0900', tsv, CIFK, 50000);
   P3.manifest.dvkd = { '001': '001-HKM-Hoàn Kiếm', '015': '015-TTKD_LTT-TTKD Lê Trọng Tấn (đã sáp nhập → 046)', 'x1': 'bỏ' };
   ok(upload('admin1', P3).every(x => x.status === 'ok'), 'tải lên bản có khối KH + bảng ĐVKD');
+  const cache = E.ctx.CacheService.getScriptCache();
+  ok(!!cache.getAll(['kh:20261016-0900:01'])['kh:20261016-0900:01'], 'tải lên → hâm sẵn cache KH theo bucket CIF (nén)');
   ok(call('u_mn', 'mst-cif', { msts: ['0100000001'] }).data.map['0100000001'].cif === '90000001', 'khối K không làm hỏng tra MST→CIF');
+  E.ctx._khMem_ = null;   // lượt sau đọc từ cache, không đọc tệp
   const f1 = call('u_mn', 'kh-find', { q: '90000001', context: 'test' }).data.items;
-  ok(f1.length === 1 && f1[0].mst === '0100000001' && f1[0].cn === '001-HKM-Hoàn Kiếm' && /GIẢ LẬP MỘT/.test(f1[0].ten), 'CIF → đúng 1 KH + MST + CN "001-HKM-Hoàn Kiếm"');
+  ok(f1.length === 1 && f1[0].mst === '0100000001' && f1[0].cn === '001-HKM-Hoàn Kiếm' && f1[0].ten === 'CÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT', 'CIF → đúng 1 KH + MST + tên có dấu + CN "001-HKM-Hoàn Kiếm" (đọc từ cache)');
   const f2 = call('u_mn', 'kh-find', { q: '0100000006' }).data.items;
   ok(f2.length === 2 && f2.map(x => x.cif).sort().join() === '90000006,90000007', 'MST → mọi CIF của MST đó');
   ok(f2.find(x => x.cif === '90000007').cn === '002 (ngoài BLOCK 2026)' && /sáp nhập → 046/.test(f2.find(x => x.cif === '90000006').cn), 'mã CN ngoài BLOCK / đã sáp nhập hiện rõ');
-  const f3 = call('u_mn', 'kh-find', { q: 'Cty CP Xay dung Gia Lap Mot' }).data.items;
-  ok(f3.length === 1 && f3[0].cif === '90000001', 'tên viết tắt, không dấu → tìm được');
-  const f4 = call('u_mn', 'kh-find', { q: 'thép giả sáu' }).data.items;
-  ok(f4.length === 2 && f4[0].cif === '90000006', 'tên → nhiều KH, tên ngắn (khớp sát) trước');
+  const f3 = call('u_mn', 'kh-find', { msts: ['0100000009', '0100000006', '0100000001'] }).data.items;
+  ok(f3.map(x => x.cif).join() === '90000006,90000007,90000001', 'tên (tra trên máy) → MST ứng viên → chỉ MST là KH TPBank, giữ thứ tự ứng viên');
   ok(call('u_mn', 'kh-find', { q: '90000008' }).data.items[0].mst === '', 'KH chưa có MST vẫn tìm được theo CIF');
-  ok(call('u_mn', 'kh-find', { q: 'ab' }).status === 'error', '< 3 ký tự → lỗi');
+  ok(call('u_mn', 'kh-find', { q: 'Cty Giả' }).status === 'error', 'gửi TÊN lên server → từ chối (tên tra trên máy)');
+  ok(call('u_mn', 'kh-find', { q: '12' }).status === 'error', '< 3 số → lỗi');
   ok(E.call({ action: 'kh-find', q: '90000001' }).error === 'AUTH_REQUIRED', 'kh-find không token → AUTH_REQUIRED');
   ok(E.db().table('NhatKy').some(r => r['Hành động'] === 'Tìm KHHH nội bộ'), 'nhật ký: tìm KHHH nội bộ');
   ok(!E.ctx.mstManifest_().dvkd.x1, 'manifest: chỉ nhận mã ĐVKD 3 số');
-}
+
+  // Lưu lô: tên · MST · CN theo dữ liệu TPB, ghi đè ô người gõ
+  let sb = call('tl_mn', 'submit-batch', { reqId: 'K1', lots: [{ cif: '90000001', tenKH: 'cty gõ tay sai', mstKH: '999', cn: 'HCM', tk: '131', ky: '2025-12-31', kyGoc: '', file: 'k.xlsx', rows: [row('Cty K', 'K1')] }],
+    partners: [{ cid: 'K1', isNew: true, mst: '', ten: 'CÔNG TY TNHH K GIẢ', aliases: [] }] });
+  const khk = E.db().table('KHHH').find(k => k['CIF'] === '90000001'), lok = E.db().table('Lo').find(l => l['CIF'] === '90000001');
+  ok(sb.status === 'ok' && khk['Tên khách hàng'] === 'CÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT' && khk['MST'] === '0100000001' && khk['ĐVKD'] === '001-HKM-Hoàn Kiếm', 'lưu lô → KHHH mới theo dữ liệu chuẩn TPB (không theo ô gõ tay)');
+  ok(lok['Tên KHHH'] === 'CÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT' && lok['CN'] === '001-HKM-Hoàn Kiếm', 'lô ghi tên + CN chuẩn');
+  // KHHH cũ (nhập tay) → chuẩn hóa: chỉ MST · Tên · ĐVKD, cột khác giữ
+  const sh = E.db().sheet('KHHH'), HH = sh.data[0];
+  const old = HH.map(h => ({ 'CIF': '90000006', 'MST': '', 'Tên khách hàng': 'thep gia sau', 'Ngành': 'Thép', 'ĐVKD': 'HN', 'Team': 'PTKD MN', 'Người tạo': 'x' }[h] || ''));
+  sh.data.push(old);
+  ok(call('u_mn', 'sync-khhh', { reqId: 'K2' }).error === 'FORBIDDEN', 'User chuẩn hóa KHHH → FORBIDDEN');
+  const sk = call('tl_mn', 'sync-khhh', { reqId: 'K3' }).data;
+  const k6 = E.db().table('KHHH').find(k => k['CIF'] === '90000006');
+  ok(sk.updated >= 1 && k6['Tên khách hàng'] === 'CÔNG TY TNHH THÉP GIẢ SÁU' && k6['MST'] === '0100000006' && /^015-TTKD_LTT/.test(k6['ĐVKD']) && k6['Ngành'] === 'Thép' && k6['Người tạo'] === 'x',
+    'chuẩn hóa KHHH → MST · Tên · ĐVKD theo TPB, Ngành/Người tạo giữ nguyên');}
 
 console.log('— Thay phiên bản · bảo vệ · gỡ');
 const P2 = pack('20261101-0900', tsv.replace('GIẢ BA', 'GIẢ BA MỚI'), CIF, 50000);

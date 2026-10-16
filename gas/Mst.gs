@@ -113,59 +113,111 @@ function apiMstCif_(u, body) {
   return { version: mstManifest_().version, map: r };
 }
 
-/* ---------- Tìm KHHH theo CIF / MST / tên (ô tìm ở bước ① Nạp dữ liệu) — chỉ server ---------- */
+/* ---------- KHHH nội bộ (KH line CB) theo CIF / MST — chỉ server (ô tìm + tự điền ở bước ① · chuẩn hóa KHHH) ---------- */
+// Khối K cuối tệp CIF: "K CIF MST BRN SEG Tên" — CIF + CN theo dữ liệu TPB · MST + tên đẹp theo sheet 900k (anh Tuân 16/10).
+// Chia bucket theo 2 số cuối CIF, nén gzip+base64 vào CacheService 6 giờ → mỗi lượt tra chỉ giải 1 vài bucket.
+// Tra theo TÊN chạy trên máy người dùng (chỉ mục tên→MST) rồi gửi danh sách MST lên — server không quét tên.
 var KH_FIND_MAX = 20;
-// Giống hệt kh_norm trong tools/build_mst_index.py — sửa 2 nơi cùng lúc
-var KH_ABBR = [[' CONG TY ', ' CTY '], [' CTCP ', ' CTY CP '], [' CO PHAN ', ' CP '], [' TRACH NHIEM HUU HAN ', ' TNHH '],
-  [' MOT THANH VIEN ', ' MTV '], [' THUONG MAI ', ' TM '], [' DICH VU ', ' DV '], [' XAY DUNG ', ' XD '], [' SAN XUAT ', ' SX ']];
-var KH_STOP = { CTY: 1, CP: 1, TNHH: 1, MTV: 1 };
-function khNorm_(s) {
-  s = str_(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toUpperCase();
-  s = ' ' + s.replace(/[^A-Z0-9]+/g, ' ').trim() + ' ';
-  KH_ABBR.forEach(function (p) { while (s.indexOf(p[0]) >= 0) s = s.split(p[0]).join(p[1]); });
-  return s.trim();
-}
 /** Mã BRN_MIS → "001-HKM-Hoàn Kiếm" theo BLOCK.xlsx (manifest.dvkd); không có → "002 (ngoài BLOCK 2026)". */
 function dvkdLabel_(m, brn) {
   var b = str_(brn); if (!b) return '';
   var d = (m && m.dvkd) || {};
   return d[b] || (b + ' (ngoài BLOCK 2026)');
 }
-var _khMem_ = null;
-function _khText_(m) {
-  if (_khMem_ && _khMem_.v === m.version) return _khMem_.t;
+function _khB_(cif) { return ('00' + str_(cif).replace(/\D/g, '')).slice(-2); }
+var _khMem_ = null;   // trong 1 request: {v, b: {bucket: text}}
+/** Đọc cả khối K (1 lần / 6 giờ / phiên bản) → bucket → cache. */
+function _khAll_(m) {
+  if (_khMem_ && _khMem_.v === m.version) return _khMem_.b;
   var f = mstFile_(mstFolder_(false), m.version + '.cif');
   if (!f) throw new Error('Thiếu file CIF của chỉ mục ' + m.version + '.');
   var text = Utilities.ungzip(Utilities.newBlob(f.getBlob().getBytes(), 'application/x-gzip')).getDataAsString('UTF-8');
-  var p = text.indexOf('\nK\t');
-  _khMem_ = { v: m.version, t: p < 0 ? '' : text.slice(p) + (text.charAt(text.length - 1) === '\n' ? '' : '\n') };
-  return _khMem_.t;
+  var all = {}, p = text.indexOf('\nK\t');
+  if (p >= 0) text.slice(p + 1).split('\n').forEach(function (line) {
+    if (line.charAt(0) !== 'K') return;
+    var b = _khB_(line.split('\t', 2)[1]); all[b] = (all[b] || '') + line + '\n';
+  });
+  var put = {};
+  Object.keys(all).forEach(function (b) { put['kh:' + m.version + ':' + b] = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(all[b], 'text/plain')).getBytes()); });
+  try { CacheService.getScriptCache().putAll(put, MST_CACHE_S); } catch (e) { /* cache đầy → vẫn dùng bản trong bộ nhớ */ }
+  _khMem_ = { v: m.version, b: all };
+  return all;
 }
-/** q = CIF | MST | tên → ≤ 20 KH {cif, mst, ten, brn, cn, seg}. CIF/MST: khớp đúng; tên: đủ mọi từ (bỏ CTY/CP/TNHH/MTV), tên ngắn trước. */
-function khFind_(m, q) {
-  var t = _khText_(m), out = [], raw = str_(q).trim(), dig = raw.replace(/\D/g, '');
-  var row = function (line) { var e = line.split('\t'); return { cif: e[1], mst: e[2], brn: e[3], cn: dvkdLabel_(m, e[3]), seg: e[4], ten: e[5], _k: e[6] || '' }; };
-  var each = function (fn) { var a = 1, b; while (a < t.length && out.length < 500) { b = t.indexOf('\n', a); if (b < 0) b = t.length; if (fn(t.slice(a, b))) out.push(row(t.slice(a, b))); a = b + 1; } };
-  if (dig && dig === raw.replace(/[\s.\-]/g, '')) {
-    var key = _mstKey_(raw), byMst = key && (dig.length === 10 || dig.length === 13);
-    each(function (l) { var e = l.split('\t', 3); return byMst ? e[2] === key : e[1] === dig; });
-    if (!out.length && byMst) each(function (l) { return l.split('\t', 2)[1] === dig; });   // CIF trùng độ dài MST
-  } else {
-    var toks = khNorm_(raw).split(' ').filter(function (w) { return w && !KH_STOP[w]; });
-    if (!toks.length) return [];
-    each(function (l) { var k = ' ' + l.slice(l.lastIndexOf('\t') + 1) + ' '; return toks.every(function (w) { return k.indexOf(' ' + w + ' ') >= 0; }); });
-    out.sort(function (a, b) { return a._k.length - b._k.length; });
-  }
-  return out.slice(0, KH_FIND_MAX).map(function (x) { delete x._k; return x; });
+function _khBuckets_(m, bs) {
+  if (_khMem_ && _khMem_.v === m.version) return _khMem_.b;
+  var names = bs.map(function (b) { return 'kh:' + m.version + ':' + b; }), got = CacheService.getScriptCache().getAll(names), out = {};
+  if (names.some(function (n) { return !got[n]; })) return _khAll_(m);
+  bs.forEach(function (b, i) { out[b] = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(got[names[i]]), 'application/x-gzip')).getDataAsString('UTF-8'); });
+  return out;
 }
+function _khRow_(m, line) { var e = line.split('\t'); return { cif: e[1], mst: e[2] || '', brn: e[3] || '', cn: dvkdLabel_(m, e[3]), seg: e[4] || '', ten: e[5] || '' }; }
+/** [CIF] → [KH] (giữ thứ tự hỏi). */
+function khByCifs_(m, cifs) {
+  cifs = cifs.map(function (c) { return str_(c).replace(/\D/g, ''); }).filter(function (c, i, a) { return c && a.indexOf(c) === i; });
+  if (!cifs.length) return [];
+  var B = _khBuckets_(m, cifs.map(_khB_).filter(function (b, i, a) { return a.indexOf(b) === i; })), out = [];
+  cifs.forEach(function (c) {
+    var t = '\n' + (B[_khB_(c)] || ''), p = t.indexOf('\nK\t' + c + '\t');
+    if (p >= 0) out.push(_khRow_(m, t.slice(p + 1, t.indexOf('\n', p + 1))));
+  });
+  return out;
+}
+/** [MST] → [KH] qua bảng MST→CIF (đã cache) — mọi CIF của MST đó, giữ thứ tự MST. */
+function khByMsts_(m, msts) {
+  var keys = msts.map(_mstKey_).filter(function (k, i, a) { return k && a.indexOf(k) === i; });
+  if (!keys.length) return [];
+  var B = _cifBuckets_(m, keys), cifs = [];
+  keys.forEach(function (k) {
+    var t = '\n' + (B['cif:' + m.version + ':' + _cifBucket_(k)] || ''), p = t.indexOf('\n' + k + '\t');
+    if (p >= 0) t.slice(p + 1, t.indexOf('\n', p + 1)).split('\t')[1].split(',').forEach(function (c) { if (c) cifs.push(c); });
+  });
+  return khByCifs_(m, cifs);
+}
+/** body.q = CIF hoặc MST (chỉ số) | body.msts = MST ứng viên từ tra tên trên máy (≤ 20) → ≤ 20 KH {cif, mst, ten, brn, cn, seg}. */
 function apiKhFind_(u, body) {
   var m = mstManifest_();
   if (!m) return { version: null, items: [] };
-  var q = str_(body.q).trim();
-  if (q.length < 3) throw new Error('Gõ ít nhất 3 ký tự (CIF, MST hoặc tên KH).');
-  var items = khFind_(m, q);
-  withLock_(function () { log_(u, 'Tìm KHHH nội bộ', str_(body.context).slice(0, 80), q.slice(0, 60) + ' → ' + items.length + ' KH'); });
+  var items, what;
+  if (body.msts) {
+    var ms = (body.msts || []).map(str_).filter(Boolean).slice(0, KH_FIND_MAX);
+    items = khByMsts_(m, ms); what = 'tên → ' + ms.length + ' MST';
+  } else {
+    var raw = str_(body.q).trim(), dig = raw.replace(/[\s.\-]/g, '');
+    if (!/^\d{3,}$/.test(dig)) throw new Error('Gõ CIF hoặc MST (chỉ số, ≥ 3 ký tự) — tìm theo tên dùng chỉ mục trên máy.');
+    items = (dig.length === 10 || dig.length === 13) ? khByMsts_(m, [raw]) : [];
+    if (!items.length) items = khByCifs_(m, [dig]);
+    what = raw.slice(0, 20);
+  }
+  items = items.slice(0, KH_FIND_MAX);
+  withLock_(function () { log_(u, 'Tìm KHHH nội bộ', str_(body.context).slice(0, 80), what + ' → ' + items.length + ' KH'); });
   return { version: m.version, items: items };
+}
+/** {CIF: KH chuẩn} cho các CIF — dùng khi lưu lô / chuẩn hóa KHHH. null nếu chưa có chỉ mục. */
+function khStd_(cifs) {
+  var m = mstManifest_();
+  if (!m) return null;
+  var out = {};
+  khByCifs_(m, cifs).forEach(function (k) { out[k.cif] = k; });
+  return out;
+}
+/** Áp dữ liệu chuẩn vào 1 dòng KHHH: CHỈ MST · Tên khách hàng · ĐVKD (cột khác giữ nguyên). → true nếu đổi. */
+function khApplyStd_(row, k) {
+  var ch = false, set = function (col, v) { if (v && str_(row[col]) !== v) { row[col] = v; ch = true; } };
+  set('MST', k.mst); set('Tên khách hàng', k.ten); set('ĐVKD', k.cn);
+  return ch;
+}
+/** Admin/Teamlead: chuẩn hóa KHHH đang có theo dữ liệu nội bộ (CIF có trong KH line CB). */
+function apiSyncKhhh_(u) {
+  if (!canDirect_(u)) throw new Error('FORBIDDEN: Admin/Teamlead.');
+  return withLock_(function () {
+    var kh = rows_('KHHH'), std = khStd_(kh.map(function (k) { return str_(k['CIF']); }));
+    if (std === null) throw new Error('Chưa có chỉ mục MST nội bộ (Admin tải lên ở Danh mục).');
+    var n = 0, found = 0;
+    kh.forEach(function (k) { var s = std[str_(k['CIF']).replace(/\D/g, '')]; if (s) { found++; if (khApplyStd_(k, s)) n++; } });
+    if (n) writeTable_('KHHH', kh);
+    log_(u, 'Chuẩn hóa KHHH nội bộ', '', kh.length + ' KHHH · ' + found + ' có trong dữ liệu TPB · ' + n + ' cập nhật');
+    return { checked: kh.length, found: found, updated: n };
+  });
 }
 
 var DT_CIF_COL = 'CIF (nếu là KH TP)';
@@ -234,6 +286,7 @@ function apiMstUpload_(u, body) {
   var it = folder.getFiles();
   while (it.hasNext()) { var x = it.next(), nm = x.getName(); if (nm !== 'manifest.json' && nm.indexOf(v + '.') !== 0) x.setTrashed(true); }
   CacheService.getScriptCache().remove('mst:man');
+  try { _khMem_ = null; _khAll_(out); } catch (e) { /* hâm cache lỗi → lượt tra đầu tự nạp */ }
   var g = enforceMstPrivate_();
   withLock_(function () { log_(u, 'Tải lên chỉ mục MST nội bộ', v, JSON.stringify(out.counts) + (g.removed.length ? ' · gỡ chia sẻ: ' + g.removed.join(', ') : '')); });
   return out;

@@ -91,9 +91,9 @@
   }
 
   /** Tên → [{cands:[{mst,name,score,branch}], auto}] · null nếu chưa có chỉ mục. Ghi nhật ký số lượng (không ghi tên). */
-  async function search(names, onProgress, context) {
+  async function search(names, onProgress, context, k) {
     if (!(await ensure())) return null;
-    const out = await rpc({ type: 'search', names, k: 5 }, [], (ph, p) => { if (onProgress) onProgress(p); });
+    const out = await rpc({ type: 'search', names, k: k || 5 }, [], (ph, p) => { if (onProgress) onProgress(p); });
     CN.net.call('log', { what: 'Tra MST nội bộ', target: context || '', detail: names.length + ' tên · ' + out.filter(r => r.auto).length + ' tự điền' }).catch(() => {});
     return out;
   }

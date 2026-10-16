@@ -14,7 +14,9 @@
 <link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body>
-<div id="loginOverlay" class="login-overlay">
+<!-- Màn chờ trong lúc tải JS (hard reload ~7 s) — tránh hiện nhầm màn đăng nhập khi đang có phiên (16/10) -->
+<div id="bootSplash" class="login-overlay"><div class="login-card"><div class="login-brand"><div class="brand-logo">360</div><div><div class="login-title">Customer Network 360</div><div class="login-sub">Đang tải ứng dụng…</div></div></div></div></div>
+<div id="loginOverlay" class="login-overlay" style="display:none">
   <form class="login-card" id="loginForm" autocomplete="on">
     <div class="login-brand"><div class="brand-logo">360</div><div><div class="login-title">Customer Network 360</div><div class="login-sub">Mạng lưới đối tác công nợ 131–331 · TT SP &amp; GP Tín dụng</div></div></div>
     <label>Tên đăng nhập SHTD<input id="lgUser" autocomplete="username" required></label>

@@ -10,7 +10,12 @@
       return { k, cif: k.cif, ten: k.ten, team: k.team, dvkd: k.dvkd, n: es.length, thu: es.reduce((s, e) => s + e.psThu, 0), tra: es.reduce((s, e) => s + e.psTra, 0),
         ky: lots.reduce((m, l) => (l.ky > m ? l.ky : m), ''), alerts: M.risks.filter(r => r.cif === k.cif).length };
     });
-    host.innerHTML = '<div class="card" id="khList"></div>';
+    host.innerHTML = (CN.store.canDirect() ? '<div class="row end"><button class="btn sm" id="khSync" title="CIF có trong dữ liệu TPB (KH line CB) → cập nhật MST · Tên · ĐVKD theo chuẩn (CIF/CN theo TPB, MST + tên theo sheet 900k). Cột khác giữ nguyên.">Chuẩn hóa KHHH theo dữ liệu nội bộ</button></div>' : '')
+      + '<div class="card" id="khList"></div>';
+    if ($('khSync')) $('khSync').onclick = async () => {
+      try { CN.ui.busy(true, 'Đang chuẩn hóa KHHH…'); const r = await CN.net.write('sync-khhh', {}, { timeoutMs: 120000 }); CN.ui.toast(`${r.checked} KHHH · ${r.found} có trong dữ liệu TPB · cập nhật ${r.updated}`, 'ok'); await CN.refresh(true); }
+      catch (e) { CN.ui.toast(e.message, 'err'); } finally { CN.ui.busy(false); }
+    };
     table($('khList'), rows, [
       { k: 'ten', t: 'Khách hàng', w: 240, f: r => `<b>${esc(r.ten)}</b><br><small class="muted mono">CIF ${esc(r.cif)}</small>` },
       { k: 'team', t: 'Team', f: r => chip(r.team || '—', 'gray') }, { k: 'dvkd', t: 'ĐVKD' },

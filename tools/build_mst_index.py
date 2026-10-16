@@ -22,7 +22,6 @@ import os
 import re
 import sys
 import time
-import unicodedata
 
 from openpyxl import load_workbook
 
@@ -31,20 +30,6 @@ SHEET_CB = 'KH line CB'
 SHEET_BLOCK = 'BLOCK 2026 (2)'   # BLOCK.xlsx — danh mục 148 ĐVKD (So_DVKD · Name_DKVD · Ma_DVKD)
 # Ghi chú sáp nhập (BLOCK.xlsx sheet BLOCK 2025): KH cũ vẫn gắn mã CN cũ trên CRS/GL023D
 MERGED = {'281': '202', '231': '230', '015': '046'}
-
-# Chuẩn hóa tên để tra KH (giống hệt khNorm_ trong gas/Mst.gs — sửa 2 nơi cùng lúc)
-KH_ABBR = [(' CONG TY ', ' CTY '), (' CTCP ', ' CTY CP '), (' CO PHAN ', ' CP '), (' TRACH NHIEM HUU HAN ', ' TNHH '),
-           (' MOT THANH VIEN ', ' MTV '), (' THUONG MAI ', ' TM '), (' DICH VU ', ' DV '), (' XAY DUNG ', ' XD '), (' SAN XUAT ', ' SX ')]
-
-
-def kh_norm(s):
-    s = unicodedata.normalize('NFD', str(s or '')).replace('đ', 'd').replace('Đ', 'D')
-    s = ''.join(ch for ch in s if unicodedata.category(ch) != 'Mn').upper()
-    s = ' ' + re.sub(r'[^A-Z0-9]+', ' ', s).strip() + ' '
-    for a, b in KH_ABBR:
-        while a in s:
-            s = s.replace(a, b)
-    return s.strip()
 
 
 def load_dvkd(path):
@@ -127,6 +112,7 @@ def main():
             continue
         names.setdefault(m, nm)
     n_s1 = len(names)
+    names900 = dict(names)   # chỉ tên từ sheet 900k (tên đẹp có dấu)
 
     cif, skip2, kh = {}, 0, []
     rows = wb[SHEET_CB].iter_rows(values_only=True)
@@ -134,9 +120,8 @@ def main():
     for r in rows:
         m = norm_mst(r[c['MST']])
         k0, nm0 = str(r[c['CIF']] or '').strip(), clean_name(r[c['FULL_NAME']])
-        if k0:   # bảng KH line CB đủ dòng (kể cả chưa có MST) — chỉ GAS đọc, cho ô tìm KHHH ở bước ①
-            kh.append('\t'.join(['K', k0, m or '', str(r[c['BRN_MIS']] or '').strip().zfill(3),
-                                  str(r[c['CG_SEGMT']] or '').strip(), nm0, kh_norm(nm0)]))
+        if k0:   # bảng KH line CB đủ dòng (kể cả chưa có MST) — chỉ GAS đọc; tên đẹp gán sau (sheet 900k)
+            kh.append([k0, m or '', str(r[c['BRN_MIS']] or '').strip().zfill(3), str(r[c['CG_SEGMT']] or '').strip(), nm0])
         if not m:
             skip2 += 1
             continue
@@ -151,12 +136,18 @@ def main():
     name_lines = ['%s\t%s' % (m, n) for m, n in sorted(names.items())]
     cif_lines = ['%s\t%s\t%s\t%s' % (m, ','.join(e['cif']), e['brn'], e['seg']) for m, e in sorted(cif.items())]
     n_cif = len(cif_lines)
-    cif_lines += ['# K\tCIF\tMST\tBRN\tSEG\tTên\tTên chuẩn hóa'] + kh   # khối KH ở CUỐI tệp (Mst.gs bỏ qua khi tra MST→CIF)
+    # Nguyên tắc (anh Tuân 16/10): CIF + CN theo dữ liệu TPB (KH line CB) · MST + tên đẹp theo sheet 900k (TEN_DN có dấu)
+    pretty = 0
+    for e in kh:
+        if e[1] and e[1] in names900:
+            e[4] = names900[e[1]]
+            pretty += 1
+    cif_lines += ['# K\tCIF\tMST\tBRN\tSEG\tTên'] + ['\t'.join(['K'] + e) for e in kh]   # khối KH ở CUỐI tệp (Mst.gs bỏ qua khi tra MST→CIF)
     f_name = write_gz(os.path.join(out, 'name_index.tsv.gz'), name_lines)
     f_cif = write_gz(os.path.join(out, 'cif_map.tsv.gz'), cif_lines)
     manifest = {
         'version': version, 'builtAt': dt.datetime.now().isoformat(timespec='seconds'), 'source': os.path.basename(src),
-        'counts': {'names': len(name_lines), 'fromMstSheet': n_s1, 'fromCbOnly': len(name_lines) - n_s1, 'cif': n_cif, 'kh': len(kh),
+        'counts': {'names': len(name_lines), 'fromMstSheet': n_s1, 'fromCbOnly': len(name_lines) - n_s1, 'cif': n_cif, 'kh': len(kh), 'khTenDep': pretty,
                    'dvkd': len(dvkd), 'skippedMstSheet': skip1, 'skippedCb': skip2},
         'files': {'name': f_name, 'cif': f_cif},
         'dvkd': dvkd,

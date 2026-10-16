@@ -109,6 +109,13 @@ function apiSubmitBatch_(u, body) {
     // 3) Lô + dòng công nợ (mọi dòng phải trỏ tới 1 đối tác đã khai trong partners)
     lotsIn.forEach(function (l) { (l.rows || []).forEach(function (r) { if (!idMap[str_(r.cid)]) throw new Error('Dòng "' + str_(r.raw) + '" chưa gán mã đối tác.'); }); });
     var cn = [], outLots = [];
+    // KHHH theo dữ liệu chuẩn TPB (CIF có trong KH line CB): Tên · MST · CN ghi đè ô người nhập (16/10)
+    var std = null;
+    try { std = khStd_(lotsIn.map(function (l) { return str_(l.cif); })); } catch (e) { /* chỉ mục lỗi/thiếu → giữ ô người nhập */ }
+    lotsIn.forEach(function (l) {
+      var s = std && std[str_(l.cif).replace(/\D/g, '')];
+      if (s) { l.tenKH = s.ten || l.tenKH; l.mstKH = s.mst || l.mstKH; l.cn = s.cn || l.cn; }
+    });
     lotsIn.forEach(function (l, i) {
       var id = lotIds[i], rws = l.rows || [];
       var lot = { 'Batch_ID': id, 'CIF': str_(l.cif), 'Tên KHHH': str_(l.tenKH), 'CN': str_(l.cn), 'TK': str_(l.tk).slice(0, 3), 'Kỳ': str_(l.ky), 'Kỳ gốc': str_(l.kyGoc),
@@ -123,9 +130,9 @@ function apiSubmitBatch_(u, body) {
         VAL_COLS.forEach(function (c, k) { o[c] = num_((r.vals || [])[k]); });
         cn.push(o);
       });
-      if (!kh.some(function (k) { return str_(k['CIF']) === str_(l.cif); })) {
-        kh.push({ 'CIF': str_(l.cif), 'MST': str_(l.mstKH), 'Tên khách hàng': str_(l.tenKH), 'ĐVKD': str_(l.cn), 'Team': u.team, 'Người tạo': u.username, 'Ngày tạo': now });
-      }
+      var had = kh.filter(function (k) { return str_(k['CIF']) === str_(l.cif); })[0], s = std && std[str_(l.cif).replace(/\D/g, '')];
+      if (!had) kh.push({ 'CIF': str_(l.cif), 'MST': str_(l.mstKH), 'Tên khách hàng': str_(l.tenKH), 'ĐVKD': str_(l.cn), 'Team': u.team, 'Người tạo': u.username, 'Ngày tạo': now });
+      else if (s) khApplyStd_(had, s);
       outLots.push({ id: id, status: lot['Trạng thái'], rows: rws.length });
     });
     try { fillCif_(dts, true); } catch (e) { /* chỉ mục MST nội bộ lỗi/thiếu → không chặn nạp lô */ }

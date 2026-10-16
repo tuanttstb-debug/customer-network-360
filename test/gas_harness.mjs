@@ -97,6 +97,7 @@ export function makeEnv({ users = [], props = {}, owner = 'owner@gmail.com' } = 
       base64Decode: s => toSigned(Buffer.from(String(s), 'base64')),
       newBlob: (data, type, name) => mkBlob(typeof data === 'string' ? Buffer.from(data, 'utf8') : fromBytes(data), type, name),
       ungzip: b => mkBlob(zlib.gunzipSync(b._buf), 'application/octet-stream'),
+      gzip: b => mkBlob(zlib.gzipSync(b._buf), 'application/x-gzip'),
       formatDate: (d, tz, f) => { const x = new Date(d.getTime() + 7 * 3600e3); const s = x.toISOString(); return f === 'yyyy-MM-dd' ? s.slice(0, 10) : s; },
     },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: s => ({ s, setMimeType() { return this; }, getContent() { return s; } }) },

@@ -263,9 +263,9 @@ try {
     const W = ['AN', 'BINH', 'PHAT', 'THANH', 'HUNG', 'MINH', 'LONG', 'PHUC', 'TAN', 'VIET'], L = ['THƯƠNG MẠI', 'XÂY DỰNG', 'SẢN XUẤT', 'VẬN TẢI'];
     const lines = ['# MST\tTên'];
     for (let i = 0; i < 3000; i++) lines.push(`${2000000000 + i}\tCÔNG TY TNHH ${L[i % 4]} ${W[i % 10]} ${W[(i * 7) % 10]} ${W[(i * 3) % 10]} ${i}`);
-    lines.push('0101234567\tCÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT', '0102222221\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI', '0102222222\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI');
-    const nameGz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n')), cifGz = zlib.gzipSync(Buffer.from('# MST\tCIF\tBRN\tSEG\n0101234567\t77700001\t101\t110000\n# K\tCIF\tMST\tBRN\tSEG\tTên\tTên chuẩn hóa\n'
-      + 'K\t77700001\t0101234567\t001\t110000\tCÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT\tCTY TNHH XD GIA LAP MOT\nK\t77700002\t0109990002\t002\t110000\tCÔNG TY CP KHHH GIẢ HAI\tCTY CP KHHH GIA HAI\n'));
+    lines.push('0101234567\tCÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT', '0102222221\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI', '0102222222\tCÔNG TY CỔ PHẦN VẬT TƯ GIẢ LẬP HAI', '0109990002\tCÔNG TY CỔ PHẦN KHÁCH HÀNG MẪU BẢY');
+    const nameGz = zlib.gzipSync(Buffer.from(lines.join('\n') + '\n')), cifGz = zlib.gzipSync(Buffer.from('# MST\tCIF\tBRN\tSEG\n0101234567\t77700001\t101\t110000\n0109990002\t77700002\t002\t110000\n# K\tCIF\tMST\tBRN\tSEG\tTên\n'
+      + 'K\t77700001\t0101234567\t001\t110000\tCÔNG TY TNHH XÂY DỰNG GIẢ LẬP MỘT\nK\t77700002\t0109990002\t002\t110000\tCÔNG TY CỔ PHẦN KHÁCH HÀNG MẪU BẢY\n'));
     const sha = b => crypto.createHash('sha256').update(b).digest('hex');
     const man = { version: '20261015-1800', builtAt: '2026-10-15T18:00:00', source: 'gia_lap.xlsx', counts: { names: lines.length - 1, cif: 1 },
       files: { name: { file: 'name_index.tsv.gz', bytes: nameGz.length, sha256: sha(nameGz) }, cif: { file: 'cif_map.tsv.gz', bytes: cifGz.length, sha256: sha(cifGz) } },
@@ -289,10 +289,10 @@ try {
     await shot(pM, '10_mst_noi_bo');
 
     await go(pM, '#/nap');
-    await pM.type('#npKhQ', 'cty cp khhh gia hai'); await pM.click('#npKhGo');
+    await pM.type('#npKhQ', 'cty cp khach hang mau bay'); await pM.click('#npKhGo');
     await pM.waitForSelector('#npKhTbl button', { timeout: 30000 }); await pM.click('#npKhTbl button');
     const f1 = await pM.evaluate(() => ['npCif', 'npTen', 'npMst', 'npCn'].map(id => document.getElementById(id).value));
-    ok(f1.join('|') === '77700002|CÔNG TY CP KHHH GIẢ HAI|0109990002|002 (ngoài BLOCK 2026)', '① tìm KH nội bộ theo tên → Chọn → điền CIF · tên · MST · CN');
+    ok(f1.join('|') === '77700002|CÔNG TY CỔ PHẦN KHÁCH HÀNG MẪU BẢY|0109990002|002 (ngoài BLOCK 2026)', '① tìm KH theo tên (viết tắt, không dấu — tra trên máy) → Chọn → điền CIF · tên có dấu · MST · CN');
     await go(pM, '#/danh-muc'); await go(pM, '#/nap');
     await pM.type('#npCif', '77700001'); await (await pM.$('#npFiles')).uploadFile(XL); await pM.click('#npRead'); await pM.waitForSelector('.batch', { timeout: 60000 });
     const f2 = await pM.evaluate(() => CN.views.nap._state.batches[0]);
