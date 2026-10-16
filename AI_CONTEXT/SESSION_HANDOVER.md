@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-16 tối #3 — test LIVE tìm KH theo tên · v0.4.3–0.4.4)
+- **Task completed:** anh deploy GAS **@8** → test LIVE (Chrome, phiên anh): Danh mục tra thử "mat troi bach khoa" → ① KH TPBank 77768686 · CN 276-BTN-Bình Tân hạng 1 ✅ (lượt đầu ~40 s dựng bảng tên) · bước ① Nạp tên đầy đủ có dấu + "&" → 77768686 hạng 1 (~18 s) ✅. Phát hiện + sửa: (a) nhánh 900k vẫn xếp "MẶT TRỜI BẠC" đầu — chấm sơ bộ cắt 300 ứng viên trước khi xét "chứa đủ token" → v0.4.3 ưu tiên tên chứa đủ token khi cắt (nay 0304194942 77% hạng 1); (b) worker lấy `core/mstmatch.js` cũ từ cache HTTP Pages (~10 phút) → v0.4.4 fetch `no-cache`.
+- **Files changed:** `core/mstmatch.js` · `assets/js/{mstidx,config}.js` · `test/e2e.mjs` (chờ đúng lượt tra) · `tools/probe_kh_name.mjs`.
+- **Decision made:** không thêm.
+- **Blocker:** không. Lượt tìm tên đầu tiên sau mỗi lần cache GAS hết hạn (6 giờ) chậm ~20–40 s.
+- **Next step:** [CC] cân nhắc hâm cache bảng tên bằng trigger 5 giờ/lần (tránh lượt chậm) · [TT] dùng thử thực tế.
+- **Regression risk:** thấp — chỉ đổi thứ tự cắt ứng viên khi opts.contain (tự điền MST đối tác không dùng contain). Test: GAS 60 · mô hình 34 · MST 91 · Excel 26 · E2E 66.
+
 ## Delta phiên (2026-10-16 tối #2 — lỗi tìm "mat troi bach khoa" · tìm KH: TPBank trước → 900k · v0.4.2, FE + GAS)
 - **Task completed:** tái hiện trên chỉ mục thật (`tools/probe_kh_name.mjs`): CIF 77768686 có MST 0304194942 nhưng không có tên 900k → đường cũ (900k top 15 → KH) trả rỗng. Thêm tìm tên ở GAS trong KH line CB (`core/khname.js`, sinh `gas/KhName.gs` qua `tools/sync_gas.mjs`) + `CN.mstidx.findKh` (song song ① GAS tên TPB · ② 900k trên máy → MST) dùng cho bước ① Nạp + Danh mục tra thử; `mstmatch` mở thêm viết tắt TPB (CPDT/PTNL/DT/PT/NL/&/CT CP…) + opts.contain; FE chịu GAS cũ (lùi về 900k).
 - **Files changed:** `core/khname.js` (mới) · `gas/KhName.gs` (sinh) · `gas/Mst.gs` (`_khNames_` cache `khn:` · `khByName_` · `apiKhFind_` nhận tên + gộp msts) · `core/mstmatch.js` · `assets/js/{mstidx,mstidx.worker,config}.js` · `views/{nap,danhmuc}.js` · `tools/{sync_gas,probe_khname,probe_kh_name}.mjs` · test `mst.test.mjs` (+7, bỏ test "từ chối tên") · `e2e.mjs` (+2).

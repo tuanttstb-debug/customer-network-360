@@ -1,6 +1,6 @@
 # PROJECT STATE — Customer Network 360
 
-**Cập nhật:** 2026-10-16 (tối) · **Version:** 0.4.2 (tìm KH theo tên: TPBank trước → 900k) · **Repo:** https://github.com/tuanttstb-debug/customer-network-360 (`main` v0.4.0) · **Prod:** https://tuanttstb-debug.github.io/customer-network-360/ ✅ **LIVE** (anh xác nhận 13/10)
+**Cập nhật:** 2026-10-16 (tối) · **Version:** 0.4.4 (tìm KH theo tên: TPBank trước → 900k — LIVE PASS, GAS @8) · **Repo:** https://github.com/tuanttstb-debug/customer-network-360 (`main` v0.4.0) · **Prod:** https://tuanttstb-debug.github.io/customer-network-360/ ✅ **LIVE** (anh xác nhận 13/10)
 
 ## Tóm tắt
 Web CN360 v0.1.0 **build + LIVE trong ngày 13/10** theo kế hoạch đã duyệt (`PHUONG_AN_VA_KE_HOACH.md`): FE khuôn SHTD (8 trang) trên GitHub Pages + backend GAS deploy @1 + DB `CN360_DB` + lõi đọc 131–331 v0.1.
