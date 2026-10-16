@@ -317,6 +317,17 @@ try {
     ok(d1 && d1['CIF (nếu là KH TP)'] === '77700001' && /^Nội bộ TPBank/.test(d1['Nguồn MST']), 'lưu → server tự điền CIF vào danh mục đối tác');
     ok(await pM.evaluate(id => !!CN.store.S.M.daLaKH.get(id), d1['Counterparty_ID']), 'mô hình: đối tác có CIF nội bộ = "Đã là KH TPBank" (loại khỏi Cơ hội)');
 
+    // Màn chi tiết KHHH (CIF 900009 không có trong TPB) → Chuẩn hóa → nhập MST → bảng đối chiếu → áp CIF + tên
+    await pM.waitForSelector('#khStd'); await pM.click('#khStd');
+    await pM.waitForFunction(() => /Không khớp dữ liệu TPB/.test((document.querySelector('#modal.on') || {}).innerText || ''), { timeout: 30000 });
+    await pM.type('#modal [data-k=mst]', '0109990002'); await modalYes(pM);
+    await pM.waitForFunction(() => /Chuẩn hóa KHHH theo dữ liệu TPB/.test((document.querySelector('#modal.on') || {}).innerText || ''), { timeout: 30000 });
+    const std = await text(pM, '#modal');
+    ok(/77700002/.test(std) && /002 \(ngoài BLOCK 2026\)/.test(std) && /Tên trên hệ thống TPB/.test(std) && /Tỉnh trước sáp nhập/.test(std), 'Chuẩn hóa (chi tiết): bảng Hiện tại → Dữ liệu TPB + tên hệ thống/900k · chi nhánh · PTKD · loại ĐVKD · tỉnh');
+    await modalYes(pM); await pM.waitForFunction(() => location.hash === '#/khach-hang/77700002', { timeout: 30000 }); await idle(pM);
+    ok(env3.db().table('KHHH').some(k => k['CIF'] === '77700002' && k['Tên khách hàng'] === 'CÔNG TY CỔ PHẦN KHÁCH HÀNG MẪU BẢY') && env3.db().table('Lo').every(l => l['CIF'] !== '900009'),
+      'áp → KHHH đổi CIF 900009 → 77700002 + tên chuẩn, lô đổi theo, mở lại đúng KHHH');
+
     const hai = env3.db().table('DoiTac').find(d => /VẬT TƯ GIẢ LẬP HAI|Vật tư Giả Lập Hai/i.test(d['Tên pháp lý']) && !d['MST']);
     await go(pM, '#/doi-tac/' + hai['Counterparty_ID']);
     await pM.click('#dtInt'); await pM.waitForSelector('#modal.on [data-k=mst]', { timeout: 30000 });

@@ -146,13 +146,16 @@ ok(sy.updated === 1 && E.db().table('DoiTac').find(d => d['MST'] === '0100000001
 
 console.log('— KHHH nội bộ (khối K trong tệp CIF): tìm theo CIF/MST/ứng viên tên · mã CN theo BLOCK · chuẩn hóa khi lưu');
 {
-  const CIFK = CIF + '# K\tCIF\tMST\tBRN\tSEG\tTên\n'
-    + 'K\t90000001\t0100000001\t001\t110000\tCÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT\n'
-    + 'K\t90000006\t0100000006\t015\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU\n'
-    + 'K\t90000007\t0100000006\t002\t110010\tCÔNG TY TNHH THÉP GIẢ SÁU (HĐ CŨ)\n'
-    + 'K\t90000008\t\t001\t110000\tCÔNG TY TNHH CHƯA CÓ MST GIẢ\n';
+  // K CIF MST BRN SEG Tên-hệ-thống-TPB Tên-900k
+  const CIFK = CIF + '0100000010\t90000010\t001\t110000\n# K\tCIF\tMST\tBRN\tSEG\tTên HT\tTên 900k\n'
+    + 'K\t90000001\t0100000001\t001\t110000\tCTY CP XD GIA LAP MOT\tCÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT\n'
+    + 'K\t90000006\t0100000006\t015\t110010\tCTY TNHH THEP GIA SAU\tCÔNG TY TNHH THÉP GIẢ SÁU\n'
+    + 'K\t90000007\t0100000006\t002\t110010\tTHEP GIA SAU HD CU\tCÔNG TY TNHH THÉP GIẢ SÁU\n'
+    + 'K\t90000008\t\t001\t110000\tCONG TY TNHH CHUA CO MST GIA\t\n'
+    + 'K\t90000010\t0100000010\t001\t110000\tCTY TNHH MUOI GIA\tCÔNG TY TNHH MƯỜI GIẢ\n';
   const P3 = pack('20261016-0900', tsv, CIFK, 50000);
-  P3.manifest.dvkd = { '001': '001-HKM-Hoàn Kiếm', '015': '015-TTKD_LTT-TTKD Lê Trọng Tấn (đã sáp nhập → 046)', 'x1': 'bỏ' };
+  P3.manifest.dvkd = { '001': { label: '001-HKM-Hoàn Kiếm', ptkd: 'PTKD_GIA', loai: 'CN Siêu cấp', tinh: 'Hà Nội', vung: 'Vùng 1' },
+    '015': '015-TTKD_LTT-TTKD Lê Trọng Tấn (đã sáp nhập → 046)', 'x1': 'bỏ' };   // 015 dạng chuỗi = manifest cũ vẫn chạy
   ok(upload('admin1', P3).every(x => x.status === 'ok'), 'tải lên bản có khối KH + bảng ĐVKD');
   const cache = E.ctx.CacheService.getScriptCache();
   ok(!!cache.getAll(['kh:20261016-0900:01'])['kh:20261016-0900:01'], 'tải lên → hâm sẵn cache KH theo bucket CIF (nén)');
@@ -166,7 +169,10 @@ console.log('— KHHH nội bộ (khối K trong tệp CIF): tìm theo CIF/MST/�
   ok(f2.find(x => x.cif === '90000007').cn === '002 (ngoài BLOCK 2026)' && /sáp nhập → 046/.test(f2.find(x => x.cif === '90000006').cn), 'mã CN ngoài BLOCK / đã sáp nhập hiện rõ');
   const f3 = call('u_mn', 'kh-find', { msts: ['0100000009', '0100000006', '0100000001'] }).data.items;
   ok(f3.map(x => x.cif).join() === '90000006,90000007,90000001', 'tên (tra trên máy) → MST ứng viên → chỉ MST là KH TPBank, giữ thứ tự ứng viên');
-  ok(call('u_mn', 'kh-find', { q: '90000008' }).data.items[0].mst === '', 'KH chưa có MST vẫn tìm được theo CIF');
+  const f8 = call('u_mn', 'kh-find', { q: '90000008' }).data.items[0];
+  ok(f8.mst === '' && f8.ten === 'CONG TY TNHH CHUA CO MST GIA', 'KH chưa có MST: tìm theo CIF được, tên = tên trên hệ thống TPB');
+  ok(f1[0].tenHT === 'CTY CP XD GIA LAP MOT' && f1[0].ten900 === 'CÔNG TY CỔ PHẦN XÂY DỰNG GIẢ LẬP MỘT' && f1[0].ptkd === 'PTKD_GIA' && f1[0].loaiDvkd === 'CN Siêu cấp' && f1[0].tinh === 'Hà Nội',
+    'KH trả đủ: tên hệ thống · tên 900k · PTKD · loại ĐVKD · tỉnh trước sáp nhập (BLOCK)');
   ok(call('u_mn', 'kh-find', { q: 'Cty Giả' }).status === 'error', 'gửi TÊN lên server → từ chối (tên tra trên máy)');
   ok(call('u_mn', 'kh-find', { q: '12' }).status === 'error', '< 3 số → lỗi');
   ok(E.call({ action: 'kh-find', q: '90000001' }).error === 'AUTH_REQUIRED', 'kh-find không token → AUTH_REQUIRED');
@@ -187,7 +193,38 @@ console.log('— KHHH nội bộ (khối K trong tệp CIF): tìm theo CIF/MST/�
   const sk = call('tl_mn', 'sync-khhh', { reqId: 'K3' }).data;
   const k6 = E.db().table('KHHH').find(k => k['CIF'] === '90000006');
   ok(sk.updated >= 1 && k6['Tên khách hàng'] === 'CÔNG TY TNHH THÉP GIẢ SÁU' && k6['MST'] === '0100000006' && /^015-TTKD_LTT/.test(k6['ĐVKD']) && k6['Ngành'] === 'Thép' && k6['Người tạo'] === 'x',
-    'chuẩn hóa KHHH → MST · Tên · ĐVKD theo TPB, Ngành/Người tạo giữ nguyên');}
+    'chuẩn hóa KHHH → MST · Tên · ĐVKD theo TPB, Ngành/Người tạo giữ nguyên');
+
+  // Đồng bộ THEO MST: CIF sai/giả nhưng MST đúng (đúng 1 CIF) → đổi CIF + dây chuyền lô/đối tác; MST nhiều CIF → để màn chi tiết
+  const push = (name, o) => { const S2 = E.db().sheet(name); S2.data.push(S2.data[0].map(h => (o[h] === undefined ? '' : o[h]))); };
+  push('KHHH', { 'CIF': 'KH099', 'MST': '0100000010', 'Tên khách hàng': 'mẫu 99', 'Ngành': 'Xây', 'Team': 'PTKD MN', 'Người tạo': 'MAU' });
+  push('KHHH', { 'CIF': 'KH098', 'MST': '0100000006', 'Tên khách hàng': 'mẫu 98', 'Team': 'PTKD MN', 'Người tạo': 'MAU' });
+  push('Lo', { 'Batch_ID': 'LO-M99', 'CIF': 'KH099', 'Tên KHHH': 'mẫu 99', 'CN': 'HN', 'TK': '131', 'Kỳ': '2025-12-31', 'Trạng thái': 'Đã duyệt', 'Team': 'PTKD MN' });
+  push('DoiTac', { 'Counterparty_ID': 'KH099', 'Tên pháp lý': 'mẫu 99', 'CIF (nếu là KH TP)': 'KH099', 'Trạng thái': 'Hoạt động' });
+  const sm = call('tl_mn', 'sync-khhh', { reqId: 'K4' }).data;
+  const T = n => E.db().table(n);
+  ok(sm.byMst === 1 && T('KHHH').some(k => k['CIF'] === '90000010' && k['Tên khách hàng'] === 'CÔNG TY TNHH MƯỜI GIẢ' && k['Ngành'] === 'Xây') && !T('KHHH').some(k => k['CIF'] === 'KH099'),
+    'đồng bộ theo MST → CIF giả KH099 đổi thành CIF thật 90000010 + tên chuẩn, Ngành giữ');
+  ok(T('Lo').find(l => l['Batch_ID'] === 'LO-M99')['CIF'] === '90000010' && T('Lo').find(l => l['Batch_ID'] === 'LO-M99')['Tên KHHH'] === 'CÔNG TY TNHH MƯỜI GIẢ' && T('DoiTac').find(d => d['Counterparty_ID'] === 'KH099')['CIF (nếu là KH TP)'] === '90000010',
+    'đổi CIF kéo theo lô (CIF + tên) và cột CIF ở đối tác');
+  ok(sm.many.includes('KH098') && T('KHHH').some(k => k['CIF'] === 'KH098'), 'MST có nhiều CIF → không tự đổi, báo để chọn ở màn chi tiết');
+
+  // Màn chi tiết: xem dữ liệu chuẩn → chọn CIF → áp trường đã tick (server lấy lại giá trị)
+  ok(call('u_mn', 'kh-std', { cif: 'KH098' }).error === 'FORBIDDEN', 'User xem/chuẩn hóa KHHH → FORBIDDEN');
+  const sd = call('tl_mn', 'kh-std', { cif: 'KH098' }).data;
+  ok(sd.via === 'mst' && sd.cands.length === 2 && sd.cur.ten === 'mẫu 98', 'chi tiết KH098: khớp theo MST → 2 CIF ứng viên + giá trị hiện tại');
+  const sd2 = call('tl_mn', 'kh-std', { cif: 'KH098', mst: '0100000010' }).data;
+  ok(sd2.cands.length === 1 && sd2.cands[0].cif === '90000010', 'không khớp → nhập MST khác để tìm');
+  ok(call('tl_mn', 'kh-apply-std', { reqId: 'K5', cif: 'KH098', toCif: '90000001', f: { cif: true } }).status === 'error', 'đổi sang CIF đã là KHHH khác → chặn');
+  ok(call('tl_mn', 'kh-apply-std', { reqId: 'K6', cif: 'KH098', toCif: '99999999', f: { cif: true } }).status === 'error', 'CIF không có trong dữ liệu TPB → chặn');
+  const ap = call('tl_mn', 'kh-apply-std', { reqId: 'K7', cif: 'KH098', toCif: '90000007', f: { cif: true, mst: true, ten: true }, tenSrc: 'ht' }).data;
+  const k7 = T('KHHH').find(k => k['CIF'] === '90000007');
+  ok(ap.cif === '90000007' && k7 && k7['Tên khách hàng'] === 'THEP GIA SAU HD CU' && k7['MST'] === '0100000006' && k7['ĐVKD'] === '', 'áp CIF + MST + tên (chọn tên hệ thống); ĐVKD không tick → giữ');
+  const ap2 = call('tl_mn', 'kh-apply-std', { reqId: 'K8', cif: '90000010', toCif: '90000010', f: { rm: true, dvkd: true } }).data;
+  const k10 = T('KHHH').find(k => k['CIF'] === '90000010');
+  ok(ap2.cif === '90000010' && k10['RM/PTKD phụ trách'] === 'PTKD_GIA' && k10['ĐVKD'] === '001-HKM-Hoàn Kiếm', 'áp PTKD (BLOCK) vào RM/PTKD phụ trách + ĐVKD');
+  ok(T('NhatKy').some(r => r['Hành động'] === 'Chuẩn hóa KHHH (chi tiết)' && /KH098/.test(r['Chi tiết'])), 'nhật ký ghi trước → sau');
+}
 
 console.log('— Thay phiên bản · bảo vệ · gỡ');
 const P2 = pack('20261101-0900', tsv.replace('GIẢ BA', 'GIẢ BA MỚI'), CIF, 50000);

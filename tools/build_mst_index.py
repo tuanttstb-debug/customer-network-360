@@ -6,13 +6,13 @@
 
 Đầu ra (3 file → Admin tải lên ở web: Danh mục → MST nội bộ):
   name_index.tsv.gz  "MST<TAB>Tên"  — pháp nhân (sheet tra MST + KH line CB không có trong sheet đó), KHÔNG đánh dấu dòng nào là KH TPBank
-  cif_map.tsv.gz     "MST<TAB>CIF<TAB>BRN_MIS<TAB>CG_SEGMT" + khối cuối "K<TAB>CIF<TAB>MST<TAB>BRN<TAB>SEG<TAB>Tên<TAB>Tên chuẩn hóa"
+  cif_map.tsv.gz     "MST<TAB>CIF<TAB>BRN_MIS<TAB>CG_SEGMT" + khối cuối "K<TAB>CIF<TAB>MST<TAB>BRN<TAB>SEG<TAB>Tên hệ thống TPB<TAB>Tên sheet 900k"
                      (toàn bộ KH line CB, cho ô tìm KHHH bước ①) — chỉ GAS đọc (không tải về trình duyệt)
   manifest.json      phiên bản · số dòng · sha256
 
 Bỏ cá nhân / hộ KD (MST 12 số) và MST sai định dạng (D: anh Tuân 2026-10-15).
 Chạy:  set PYTHONUTF8=1 && python tools/build_mst_index.py "D:\\Công việc\\USMN\\Nen\\TRA CUU MST.xlsx" [thư mục ra] [BLOCK.xlsx]
-       BLOCK.xlsx mặc định ở thư mục cha của file nguồn → manifest.dvkd {"001": "001-HKM-Hoàn Kiếm", …}
+       BLOCK.xlsx mặc định ở thư mục cha của file nguồn → manifest.dvkd {"001": {label "001-HKM-Hoàn Kiếm", ptkd, loai, tinh, vung}, …}
 """
 import datetime as dt
 import gzip
@@ -33,23 +33,29 @@ MERGED = {'281': '202', '231': '230', '015': '046'}
 
 
 def load_dvkd(path):
-    """BLOCK.xlsx → {'001': '001-HKM-Hoàn Kiếm', …} (bỏ tiền tố 'TPBank ')."""
+    """BLOCK.xlsx → {'001': {'label': '001-HKM-Hoàn Kiếm', 'ma', 'ten', 'ptkd', 'loai', 'tinh', 'vung'}, …} (bỏ tiền tố 'TPBank ')."""
     if not os.path.exists(path):
         raise SystemExit('Thiếu BLOCK.xlsx: ' + path)
     ws = load_workbook(path, read_only=True, data_only=True)[SHEET_BLOCK]
     rows = ws.iter_rows(values_only=True)
-    c = find_cols(next(rows), ['So_DVKD', 'Name_DKVD', 'Ma_DVKD'])
+    hdr = [str(x or '').strip() for x in next(rows)]
+    c = find_cols(hdr, ['So_DVKD', 'Name_DKVD', 'Ma_DVKD', 'Vung', 'Loai_DVKD', 'Tinh_truocsatnap'])
+    ip = next((i for i, h in enumerate(hdr) if h.upper().startswith('PTKD')), None)   # "PTKD 2026 - Update 08.2026" (tên cột đổi theo kỳ)
+    if ip is None:
+        raise SystemExit('BLOCK.xlsx thiếu cột PTKD …')
+    v = lambda r, k: str(r[c[k]] or '').strip()
     out = {}
     for r in rows:
-        so = str(r[c['So_DVKD']] or '').strip()
+        so = v(r, 'So_DVKD')
         if not so:
             continue
         so = so.zfill(3)
-        ten = re.sub(r'^TPBank\s+', '', str(r[c['Name_DKVD']] or '').strip())
-        out[so] = '%s-%s-%s' % (so, str(r[c['Ma_DVKD']] or '').strip(), ten)
-    for old, new in MERGED.items():
-        if old in out:
-            out[old] += ' (đã sáp nhập → %s)' % new
+        ten = re.sub(r'^TPBank\s+', '', v(r, 'Name_DKVD'))
+        lab = '%s-%s-%s' % (so, v(r, 'Ma_DVKD'), ten)
+        if so in MERGED:
+            lab += ' (đã sáp nhập → %s)' % MERGED[so]
+        out[so] = {'label': lab, 'ma': v(r, 'Ma_DVKD'), 'ten': ten, 'ptkd': str(r[ip] or '').strip(), 'loai': v(r, 'Loai_DVKD'),
+                   'tinh': v(r, 'Tinh_truocsatnap'), 'vung': v(r, 'Vung')}
     return out
 
 
@@ -139,10 +145,10 @@ def main():
     # Nguyên tắc (anh Tuân 16/10): CIF + CN theo dữ liệu TPB (KH line CB) · MST + tên đẹp theo sheet 900k (TEN_DN có dấu)
     pretty = 0
     for e in kh:
-        if e[1] and e[1] in names900:
-            e[4] = names900[e[1]]
-            pretty += 1
-    cif_lines += ['# K\tCIF\tMST\tBRN\tSEG\tTên'] + ['\t'.join(['K'] + e) for e in kh]   # khối KH ở CUỐI tệp (Mst.gs bỏ qua khi tra MST→CIF)
+        t9 = names900.get(e[1], '') if e[1] else ''
+        e.append(t9)
+        pretty += 1 if t9 else 0
+    cif_lines += ['# K\tCIF\tMST\tBRN\tSEG\tTên trên hệ thống TPB\tTên theo sheet 900k'] + ['\t'.join(['K'] + e) for e in kh]   # khối KH ở CUỐI tệp (Mst.gs bỏ qua khi tra MST→CIF)
     f_name = write_gz(os.path.join(out, 'name_index.tsv.gz'), name_lines)
     f_cif = write_gz(os.path.join(out, 'cif_map.tsv.gz'), cif_lines)
     manifest = {

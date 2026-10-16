@@ -23,6 +23,8 @@ var ACTIONS = {
   'mst-cif':        { fn: apiMstCif_ },
   'kh-find':        { fn: apiKhFind_ },
   'sync-khhh':      { fn: apiSyncKhhh_, write: true },
+  'kh-std':         { fn: apiKhStd_ },
+  'kh-apply-std':   { fn: apiKhApplyStd_, write: true },
   'sync-cif':       { fn: apiSyncCif_, write: true },
   'mst-upload':     { fn: apiMstUpload_, write: true },
   'mst-remove':     { fn: apiMstRemove_, write: true },
