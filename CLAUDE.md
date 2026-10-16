@@ -9,13 +9,13 @@ Repo này theo chuẩn **AI OS Registry (Hub-and-Spoke)**. Tri thức dự án s
 
 ## Quy tắc làm việc
 - Việc nhỏ → commit nhỏ → cập nhật `AI_CONTEXT/` → `git push` (chỉ khi anh Tuân yêu cầu hoặc `/handover`).
-- **Gate trước push / clasp push:** `node test/gas.test.mjs` + `node test/model.test.mjs` + `node test/e2e.mjs` pass 100%.
+- **Gate trước push / clasp push:** `node test/gas.test.mjs` + `node test/model.test.mjs` + `node test/mst.test.mjs` + `node test/e2e.mjs` pass 100%.
 - **Kết thúc phiên:** delta `SESSION_HANDOVER.md` đủ 6 trường; cập nhật `PROJECT_STATE`/`TODO_NEXT`/`TECH_DEBT` nếu đổi.
 
 ## Dữ liệu (đọc kỹ — ngoại lệ data-boundary do anh Tuân duyệt 2026-10-13)
 - Hệ thống **lưu dữ liệu khách hàng thật** (tên KHHH, đối tác, số công nợ) trên Google Sheets `CN360_DB` của TK chủ — **ngoại lệ có chủ đích**, kèm 9 biện pháp bắt buộc (`PHUONG_AN_VA_KE_HOACH.md` §6). Không nới bất kỳ biện pháp nào khi chưa hỏi anh.
 - **Repo GitHub là public, CHỈ CODE:** không commit xlsx/pdf/csv/dữ liệu (đã `.gitignore`); test chỉ dùng dữ liệu GIẢ; không chép tệp mẫu `D:\Công việc\USMN\` vào repo.
-- Tệp gốc PDF/scan/BCTC **không bao giờ** gửi lên GAS; FE không lưu dữ liệu KH vào localStorage/IndexedDB (chỉ bộ nhớ trang).
+- Tệp gốc PDF/scan/BCTC **không bao giờ** gửi lên GAS; FE không lưu dữ liệu KH vào localStorage/IndexedDB (chỉ bộ nhớ trang). **Ngoại lệ A4 (DEC-20261015-02):** chỉ mục tên→MST nội bộ (không CIF) được lưu IndexedDB `cn360_mst`, xóa khi đăng xuất/30 ngày; CIF chỉ tra ở GAS.
 - Chỉ TK chủ mở file DB: `Guard.gs` gỡ chia sẻ khi setup + 7h hằng ngày. Không thêm endpoint đọc dữ liệu không cần token.
 
 ## Nguồn sự thật

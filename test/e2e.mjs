@@ -54,7 +54,7 @@ const fake2 = [['TỔNG HỢP CÔNG NỢ PHẢI TRẢ'], ['Tài khoản: 331; T�
 const wb2 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb2, XLSX.utils.aoa_to_sheet(fake2), 'S1');
 const XL2 = path.join(TMP, 'gia_lap_331.xlsx'); XLSX.writeFile(wb2, XL2);
 
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', protocolTimeout: 0, args: ['--no-first-run'] });
+const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', protocolTimeout: 0, args: ['--no-first-run', '--unsafely-treat-insecure-origin-as-secure=' + BASE.slice(0, -1)] });   // prod chạy https (github.io) → crypto.subtle cần secure context
 const ext = [], errs = [], csp = [];
 let vqrName = 'CÔNG TY TRÁCH NHIỆM HỮU HẠN XÂY DỰNG GIẢ LẬP MỘT';
 async function newPage(curEnv) {
