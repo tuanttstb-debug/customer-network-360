@@ -49,7 +49,8 @@
 
   async function makeWorker() {
     // CSP chỉ cho worker từ blob: → ghép lõi + worker thành 1 blob
-    const src = await Promise.all(['core/mstmatch.js', 'assets/js/mstidx.worker.js'].map(u => fetch(u).then(r => { if (!r.ok) throw new Error('Không tải được ' + u); return r.text(); })));
+    // no-cache: kiểm lại với máy chủ (ETag) — tránh worker chạy bộ tra cũ trong cache HTTP ~10 phút sau mỗi lần phát hành (gặp khi test LIVE 16/10)
+    const src = await Promise.all(['core/mstmatch.js', 'assets/js/mstidx.worker.js'].map(u => fetch(u, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error('Không tải được ' + u); return r.text(); })));
     const url = URL.createObjectURL(new Blob([src[0], '\n;\n', src[1]], { type: 'text/javascript' }));
     const w = new Worker(url);
     setTimeout(() => URL.revokeObjectURL(url), 60000);
