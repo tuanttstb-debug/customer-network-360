@@ -18,7 +18,7 @@
     const lots = st.data.lots.filter(l => l.status === 'Đã duyệt' && (all || myCif.has(l.cif))), lotIds = new Map(lots.map(l => [l.id, l]));
     const wb = XLSX.utils.book_new(), dt = new Map(st.data.doiTac.map(d => [d.id, d]));
     XLSX.utils.book_append_sheet(wb, ws(['Kỳ', 'Kỳ gốc', 'CN', 'CIF', 'Tên KHHH', 'TK', 'Mã ĐT nội bộ', 'Tên đối tác gốc', 'Counterparty_ID', 'Tên pháp lý', 'MST đối tác', 'Dư Nợ đầu kỳ', 'Dư Có đầu kỳ', 'Phát sinh Nợ', 'Phát sinh Có', 'Dư Nợ cuối kỳ', 'Dư Có cuối kỳ', 'Cân đối', 'Lô', 'Người nạp'],
-      st.data.congNo.filter(c => lotIds.has(c.lot)).map(c => { const l = lotIds.get(c.lot), d = dt.get(c.id) || {}; return [l.ky, l.kyGoc, l.cn, l.cif, l.tenKH, l.tk, c.ma, c.raw, c.id, d.ten || '', d.mst || '', ...c.vals, c.bal, l.id, l.by]; })), 'CongNo');
+      st.data.congNo.filter(c => lotIds.has(c.lot) && !(CN.store.chiCan() && c.bal === 'Chưa cân')).map(c => { const l = lotIds.get(c.lot), d = dt.get(c.id) || {}; return [l.ky, l.kyGoc, l.cn, l.cif, l.tenKH, l.tk, c.ma, c.raw, c.id, d.ten || '', d.mst || '', ...c.vals, c.bal, l.id, l.by]; })), 'CongNo');
     const ids = new Set(st.data.congNo.filter(c => lotIds.has(c.lot)).map(c => c.id));
     XLSX.utils.book_append_sheet(wb, ws(['Counterparty_ID', 'MST', 'Tên pháp lý', 'Cá nhân', 'Trạng thái MST', 'Nguồn MST', 'Đã là KH TPBank', 'Ngành', 'Ghi chú'],
       st.data.doiTac.filter(d => all || ids.has(d.id)).map(d => [d.id, d.mst, d.ten, d.caNhan ? 'Có' : '', d.ttMst, d.nguonMst, st.M.daLaKH.get(d.id) ? 'Có' : 'Không', d.nganh, d.ghiChu])), 'DoiTac');
@@ -40,6 +40,39 @@
     XLSX.utils.book_append_sheet(wb, ws(['Hạng', 'CIF', 'Khách hàng', 'Team', 'Counterparty_ID', 'Đối tác', 'Vai trò suy luận', 'Tỷ trọng', 'Tổng quy mô QH', 'Loại cảnh báo tập trung', 'Mức độ', 'Mắt xích chung', 'PS phải thu 3T gần nhất', 'PS phải thu 3T trước', '% thay đổi', 'Suy giảm đầu ra', 'Đối tác ngừng/tạm HĐ', 'Hành động khuyến nghị'],
       risks.map(r => [r.rank, r.cif, r.tenKH, r.team, r.id, r.ten, r.role, r.share, r.scale, r.type, r.level, r.chain, r.ps3a, r.ps3b, r.chg === null ? '' : r.chg, r.decline, r.stop, r.action])), '11_Risk_Alert');
   }
+  /** Sheet Counterparty theo "TEMPLATE - KHHH TPBANK ver 3" (CR Duyên 19/10 · D19/D20): bố cục 2 dòng tiêu đề A–AB y hệt mẫu.
+   *  B = MST, chưa có → mã DT (D19) · D = mã CN quản lý CIF đối tác (tra mst-cif lúc xuất; lỗi → để trống) · K–O, T–AB để trống (đợt 2, không SĐT). */
+  const CP_GROUPS = [['E1:I1', 'THÔNG TIN PS NỢ - CÓ VỚI KHHH'], ['J1:O1', 'THÔNG TIN KHÁCH HÀNG'], ['P1:S1', 'THÔNG TIN PS VỚI KHHH TẠI TPK'], ['T1:AB1', 'THÔNG TIN CIC']];
+  const CP_HEAD = ['STT', 'MST (ID đối tác)', 'CIF đối tác (nếu có)', 'ĐVKD QL đối tác\n(mã số)', 'Tên đối tác', 'KỲ PS', 'TK', 'Tổng DS phát sinh nợ', 'Tổng DS phát sinh có', 'Tổng phát sinh trên KHHH',
+    'Doanh thu 2024', 'Doanh số trúng thầu 2025', 'DS xuất nhập khẩu 2024', 'Người đại diện PL', 'SDT di động', 'MST KHHH', 'CIF KHHH', 'TÊN KHHH', 'Tỷ trọng phát sinh trên KHHH',
+    'Ngày báo cáo CIC', 'Dư nợ ngắn hạn VND', 'Dư nợ ngắn hạn USD', 'Dư nợ trung-dài hạn VND', 'Dư nợ trung-dài hạn USD', 'Cam kết ngoại bảng VND', 'Cam kết ngoại bảng USD', 'GIA TRI NO QH', 'LS CO PS NQH (YES/NO)'];
+  const dmy = ky => (/^(\d{4})-(\d\d)-(\d\d)/.test(ky) ? ky.slice(8, 10) + '/' + ky.slice(5, 7) + '/' + ky.slice(0, 4) : ky);
+  function counterpartySheet(rows, cnOf) {
+    const top = Array(28).fill(''); CP_GROUPS.forEach(([rg, t]) => { top[XLSX.utils.decode_range(rg).s.c] = t; });
+    const aoa = [top, CP_HEAD, ...rows.map((r, i) => [i + 1, r.mst || r.id, r.cifDT, cnOf(r.mst), r.ten, dmy(r.ky), +r.tk || r.tk, r.no, r.co, r.tong, '', '', '', '', '', r.mstKH, r.cif, r.tenKH, 0,
+      '', '', '', '', '', '', '', '', ''])];
+    const sh = XLSX.utils.aoa_to_sheet(aoa);
+    rows.forEach((r, i) => {
+      const R = i + 3;
+      ['H', 'I', 'J'].forEach(c => { sh[c + R].z = '#,##0'; });
+      sh['S' + R] = { t: 'n', v: r.tong ? (r.no + r.co) / r.tong : 0, f: `IF(J${R}=0,0,(H${R}+I${R})/J${R})`, z: '0.00%' };
+    });
+    sh['!merges'] = CP_GROUPS.map(([rg]) => XLSX.utils.decode_range(rg));
+    sh['!cols'] = CP_HEAD.map((h, j) => ({ wch: j === 0 ? 5 : j === 4 || j === 17 ? 40 : Math.max(12, Math.min(22, h.length + 2)) }));
+    return sh;
+  }
+  const exportCounterparty = run(async () => {
+    const st = S(), all = CN.store.canDirect(), me = st.user.username.toLowerCase();
+    const cifs = all ? null : new Set(st.data.lots.filter(l => l.by.toLowerCase() === me).map(l => l.cif));
+    const rows = CNModel.counterparty(st.data, { chiCan: CN.store.chiCan(), cifs });
+    if (!rows.length) throw new Error('Chưa có dữ liệu công nợ đã duyệt trong phạm vi của bạn.');
+    let map = {};
+    try { map = (await CN.mstidx.cif(rows.map(r => r.mst).filter(Boolean), 'Xuất Counterparty')).map; }
+    catch (e) { CN.ui.toast('Không tra được ĐVKD đối tác (' + e.message + ') — cột D để trống', 'err'); }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, counterpartySheet(rows, m => (m && map[m] && map[m].cn) || ''), 'Counterparty');
+    await save(wb, fname('CN360_Counterparty'), all ? 'all' : 'mine', rows.length + ' dòng' + (CN.store.chiCan() ? ' · chỉ số đã cân' : ''));
+  });
   const exportOpps = run(async () => { const wb = XLSX.utils.book_new(); oppSheet(wb, S().M.opps); await save(wb, fname('CN360_CoHoi'), 'view', S().M.opps.length + ' cơ hội'); });
   const exportRisks = run(async () => { const wb = XLSX.utils.book_new(); riskSheet(wb, S().M.risks); await save(wb, fname('CN360_RuiRo'), 'view', S().M.risks.length + ' cảnh báo'); });
 
@@ -70,5 +103,5 @@
     const rows = objs(wb, name), pick = (r, re) => { const k = Object.keys(r).find(h => re.test(h)); return k ? String(r[k]).trim() : ''; };
     return rows.map(r => ({ cif: pick(r, /^cif/i), mst: pick(r, /^mst|mã số thuế/i), ten: pick(r, /tên/i), cn: pick(r, /^cn$|chi nhánh|đvkd/i) })).filter(r => r.cif || r.mst);
   }
-  CN.xlsx = { exportAll, exportOpps, exportRisks, readKhoV01, readKhTP };
+  CN.xlsx = { exportAll, exportCounterparty, counterpartySheet, exportOpps, exportRisks, readKhoV01, readKhTP };
 })();

@@ -101,5 +101,25 @@ ok(M2.opps.find(o => o.id === 'DT00002').priority === 'P1 - Tiếp cận ngay', 
 ok(M2.allRisks.find(r => r.cif === '1' && r.id === 'DT00001').level === 'Trung bình', 'đổi ngưỡng tập trung cao → đổi mức độ');
 ok(Mo.datedifM('2025-07-15', '2025-08-14') === 0 && Mo.datedifM('2025-07-15', '2025-08-15') === 1, 'DATEDIF "m" đúng theo ngày');
 
+console.log('— Chỉ số đã cân (D17)');
+const dataLech = Object.assign({}, data, { congNo: data.congNo.map(r => (r.lot === 'L2' && r.id === 'DT00002' ? Object.assign({}, r, { bal: 'Chưa cân' }) : r)) });
+const Mc = Mo.compute(dataLech, { chiCan: true }), Mk = Mo.compute(dataLech);
+ok(Mc.chiCan === true && Mc.anChuaCan === 1, 'bật chiCan → ẩn đúng 1 dòng "Chưa cân" của lô đã duyệt');
+ok(!Mc.edges.find(e => e.cif === '1' && e.id === 'DT00002') && Mc.edges.find(e => e.cif === '2' && e.id === 'DT00002'), 'quan hệ chỉ có dòng chưa cân bị bỏ; KHHH khác giữ nguyên');
+ok(near(Mc.edges.find(e => e.cif === '1' && e.id === 'DT00001').share, 1), 'tỷ trọng tính lại trên dòng đã cân: 30 / 30 = 1');
+ok(Mk.anChuaCan === 0 && Mk.edges.length === M.edges.length && near(Mk.edges.find(e => e.cif === '1' && e.id === 'DT00001').share, 0.75), 'tắt chiCan → như cũ (0,75)');
+
+console.log('— Counterparty template ver 3 (D19)');
+const CP = Mo.counterparty(data);
+ok(CP.length === 7, '7 dòng = đối tác × KHHH × TK × kỳ của lô đã duyệt (bỏ lô chờ duyệt/thay thế)');
+ok(CP.map(r => r.cif + r.tk + r.ky.slice(5, 7)).join(',') === '113106,113112,113112,113112,133112,133112,213112', 'xếp KHHH → TK → kỳ');
+const cp1 = CP[1];
+ok(cp1.id === 'DT00001' && cp1.no === 20 * B && cp1.co === 15 * B && cp1.tong === 51 * B, 'PS Nợ/Có theo đối tác; J = Σ(Nợ+Có) cả KHHH×TK×kỳ = 35+14+2 = 51 tỷ');
+ok(cp1.mst === '0100000001' && cp1.mstKH === '0100000099' && cp1.tenKH === 'KHHH Một Giả', 'MST đối tác + MST/tên KHHH theo danh mục');
+ok(CP[2].id === 'DT00002' && CP[2].mst === '' && CP[0].tong === 18 * B, 'đối tác chưa MST giữ mã DT; kỳ 30/06 tổng riêng 18 tỷ');
+const CPc = Mo.counterparty(dataLech, { chiCan: true });
+ok(CPc.length === 6 && CPc[1].tong === 37 * B, 'chiCan → bỏ dòng chưa cân, J tính lại 35 + 2 = 37 tỷ');
+ok(Mo.counterparty(data, { cifs: new Set(['2']) }).length === 1, 'phạm vi User: chỉ KHHH được phép');
+
 console.log(`MODEL: ${pass} pass · ${fail} fail`);
 process.exit(fail ? 1 : 0);

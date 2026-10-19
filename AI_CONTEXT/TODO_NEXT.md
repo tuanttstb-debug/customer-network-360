@@ -3,6 +3,8 @@
 Ưu tiên trên xuống. Owner: [CC]=Claude Code · [TT]=Tuân.
 
 ## Cao (2026-10-13 → 2026-10-16)
+0000. [TT] 2026-10-22: nghiệm thu v0.5.0 (CR đợt 1: tab/tick bước ③ · "Chỉ số đã cân" · Xuất Counterparty ver 3) → Pilot 2026-10-23.
+0001. [CC] Đợt 2 (sau 2026-10-23, trước 2026-10-31): nạp Excel "Bổ sung đối tác" theo MST (doanh thu 2024 · trúng thầu 2025 · XNK 2024 · người ĐDPL — KHÔNG SĐT) · CIC đối tác (nối CIC QLDM) · cấu hình cột xuất để Duyên tự sửa + HDSD 1 trang.
 000. [CC] Hâm cache bảng tên KH (khn:) bằng trigger ~5 giờ/lần — tránh lượt tìm tên đầu chậm 20–40 s sau khi cache 6 giờ hết hạn.
 00. [TT] 2026-10-16: push v0.4.1 → thử nạp 4 tệp Excel ICV trên web (Excel là luồng chính) → báo nếu tệp phần mềm khác không nhận được tiêu đề (gửi [CC] tệp để mở rộng).
 0. [TT] 2026-10-16: tải chỉ mục `D:\Công việc\USMN\Nen\_build\20261016-1401\` (Danh mục → MST nội bộ) → thử "Chuẩn hóa KHHH" (danh sách + chi tiết) với KHHH đã đổi MST → báo lỗi nếu có.

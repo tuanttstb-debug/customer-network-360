@@ -128,6 +128,16 @@ try {
   await page.click('#npToMap'); await page.waitForSelector('table.map');
   const kinds = await page.evaluate(() => CN.views.nap._state.assign.map(a => a.kind));
   ok(kinds[0] === 'moi' && kinds[2] === 'goi-y' && kinds[3] === 'ca-nhan', '③ đối tác mới · gợi ý gộp ("Haii") · cá nhân (' + kinds.join(',') + ')');
+  // CR Ly (D18): tab lọc theo nhóm + tick duyệt hàng loạt
+  const tabs = await page.$$eval('#npTabs [data-tab]', bs => bs.map(b => b.dataset.tab + ':' + b.querySelector('.chip').textContent));
+  ok(['all:4', 'moi:2', 'goi-y:1', 'ca-nhan:1', 'no-mst:3'].every(t => tabs.includes(t)), '③ tab theo nhóm có số đếm (' + tabs.join(' ') + ')');
+  await page.click('#npTabs [data-tab=goi-y]'); await page.waitForSelector('#npTabs [data-tab=goi-y].on');
+  ok((await page.$$eval('table.map tbody tr[data-i]', trs => trs.map(t => t.dataset.i))).join() === '2', 'tab "Gợi ý — chờ duyệt" chỉ hiện dòng "Haii"');
+  await page.click('#npSelAll'); await page.waitForFunction(() => CN.views.nap._state.sel.size === 1);
+  await page.click('[data-bulk=gop]'); await page.waitForSelector('table.map');
+  ok(await page.evaluate(() => { const a = CN.views.nap._state.assign; return a[2].choice === a[1].id && a[2].choice === a[2].cand[0].id; }), 'tick + "Gộp theo gợi ý #1" → "Haii" gộp vào "Giả Lập Hai"');
+  await page.click('#npTabs [data-tab=all]'); await page.waitForSelector('table.map tbody tr[data-i="3"]');
+  ok(/chưa có MST vẫn lưu được/.test(await text(page, '#npBody')), '③ ghi rõ: đối tác chưa có MST vẫn lưu được');
   await page.click('tr[data-i="2"] input[type=radio]:not([value=new])'); await page.waitForSelector('table.map');
   ok(await page.evaluate(() => { const a = CN.views.nap._state.assign; return a[2].choice === a[1].id; }), 'chọn gộp "Haii" vào "Giả Lập Hai"');
   await page.$eval('tr[data-i="0"] input[data-f=mst]', e => { e.value = '0101234567'; e.dispatchEvent(new Event('change')); });
@@ -136,6 +146,7 @@ try {
   ok(/Tên đã cập nhật theo dữ liệu VietQR/.test(await text(page, 'tr[data-i="0"] .tnote')), 'Kiểm MST (VietQR giả) → cập nhật tên + cảnh báo inline');
   ok(await page.$('tr[data-i="3"] [data-act=vqr]') === null, 'cá nhân: không có nút tra MST');
   await shot(page, '02_nap_doitac');
+  await page.waitForFunction(() => !document.querySelector('.toast'), { timeout: 15000 });   // toast "Đã áp…" che nút
   await page.click('#npToSave'); await page.waitForSelector('#npSave');
   ok(/Gửi teamlead duyệt/.test(await text(page, '#npSave')), '④ User: nút "Gửi teamlead duyệt"');
   await page.click('#npSave');
@@ -174,6 +185,7 @@ try {
   const k2 = await pTL.evaluate(() => CN.views.nap._state.assign.map(a => ({ kind: a.kind, mst: a.mst, nguon: a.nguonMst })));
   ok(k2[0].kind === 'mst', 'mã ĐT = MST → nhận ra đối tác đã có theo MST (' + k2.map(x => x.kind).join(',') + ')');
   ok(k2[1].mst === '0103333333' && /Mã ĐT/.test(k2[1].nguon), 'đối tác mới: MST điền sẵn từ mã ĐT trên sổ');
+  await pTL.waitForFunction(() => !document.querySelector('.toast'), { timeout: 15000 });   // toast "Đã đọc…" che nút
   await pTL.click('#npToSave'); await pTL.waitForSelector('#npSave');
   ok(/Lưu vào kho/.test(await text(pTL, '#npSave')), '④ Teamlead: nút "Lưu vào kho"');
   await pTL.click('#npSave'); await pTL.waitForFunction(() => window.__lastSubmit && location.hash.startsWith('#/khach-hang/'), { timeout: 30000 }); await idle(pTL);
@@ -219,6 +231,27 @@ try {
   ok(['CongNo', 'DoiTac', 'TenGop', 'KHHH', '08_Relationship_Edge', '09_Opportunity', '11_Risk_Alert'].every(s => xw.SheetNames.includes(s)), 'Excel xuất đủ sheet: ' + xw.SheetNames.join(','));
   ok(XLSX.utils.sheet_to_json(xw.Sheets.CongNo).length === 6, 'Teamlead xuất toàn bộ: 6 dòng công nợ (cá nhân vẫn có ở CongNo)');
   ok(env.db().table('NhatKy').some(r => r['Hành động'] === 'Xuất Excel' && r['Người'] === 'tl_mn'), 'xuất Excel được ghi nhật ký');
+  // CR Duyên (D19): sheet Counterparty đúng bố cục template ver 3
+  await pTL.evaluate(() => { window.__lastWb = null; }); await pTL.click('#xCp');
+  await pTL.waitForFunction(() => window.__lastWb, { timeout: 30000 }); await idle(pTL);
+  const cw = XLSX.read(Buffer.from(await pTL.evaluate(() => window.__lastWb), 'base64'), { cellFormula: true }), cs = cw.Sheets.Counterparty;
+  const caoa = XLSX.utils.sheet_to_json(cs, { header: 1, defval: '' });
+  ok(cw.SheetNames.join() === 'Counterparty' && caoa[1].length === 28 && caoa[1][1] === 'MST (ID đối tác)' && caoa[1][27] === 'LS CO PS NQH (YES/NO)' && caoa[0][4] === 'THÔNG TIN PS NỢ - CÓ VỚI KHHH' && (cs['!merges'] || []).length === 4, 'Counterparty: 2 dòng tiêu đề A–AB + 4 nhóm gộp ô như mẫu ver 3');
+  const crow = caoa.slice(2);
+  ok(crow.length === 5, 'Counterparty: 5 dòng = 3 đối tác KHHH 1 (131) + 2 đối tác KHHH 2 (331) (' + crow.length + ')');
+  const c131 = crow.filter(r => r[16] === '900001');
+  ok(c131.every(r => r[9] === 67.2e9) && c131.reduce((s, r) => s + r[7] + r[8], 0) === 67.2e9, 'J = Σ(PS Nợ + PS Có) cả KHHH × TK × kỳ = 67,2 tỷ');
+  ok(crow.some(r => r[1] === '0101234567') && crow.some(r => /^DT\d{5}$/.test(r[1])), 'cột B: MST khi có, chưa có MST → mã DT');
+  ok(/^IF\(J3=0,0,\(H3\+I3\)\/J3\)$/.test(cs.S3.f || '') && crow.every(r => r[10] === '' && r[13] === '' && r[14] === '' && r[19] === ''), 'S = công thức tỷ trọng · K–O, T–AB để trống (không SĐT)');
+  // CR Hương (D17): công tắc "Chỉ số đã cân" — mặc định bật, ẩn dòng chưa cân khỏi 360 + file xuất
+  const cc = await pTL.evaluate(async () => {
+    const r = CN.store.S.data.congNo.find(c => c.lot && CN.store.S.data.lots.find(l => l.id === c.lot && l.status === 'Đã duyệt' && l.cif === '900001'));
+    const old = r.bal; r.bal = 'Chưa cân'; const on0 = CN.store.chiCan();
+    CN.store.setChiCan(true); const a = CN.store.S.M.anChuaCan, nOn = CNModel.counterparty(CN.store.S.data, { chiCan: true }).length;
+    CN.store.setChiCan(false); const b = CN.store.S.M.anChuaCan, nOff = CNModel.counterparty(CN.store.S.data, { chiCan: false }).length;
+    r.bal = old; CN.store.setChiCan(true); return { on0, a, b, nOn, nOff };
+  });
+  ok(cc.on0 === true && cc.a === 1 && cc.b === 0 && cc.nOn === 4 && cc.nOff === 5, 'công tắc "Chỉ số đã cân": mặc định bật · bật ẩn 1 dòng chưa cân · tắt gộp lại (' + JSON.stringify(cc) + ')');
   await pMB.evaluate(() => { window.__NO_DOWNLOAD = true; window.__lastWb = null; });
   await pMB.evaluate(() => CN.xlsx.exportAll()); await pMB.waitForFunction(() => window.__lastWb, { timeout: 30000 });
   const xm = XLSX.read(Buffer.from(await pMB.evaluate(() => window.__lastWb), 'base64'));
@@ -322,6 +355,17 @@ try {
     ok(A[0].mst === '0101234567' && A[0].auto && A[0].cif === '77700001' && /^Nội bộ TPBank/.test(A[0].src), '③ tự tra nội bộ: "Công ty TNHH Xây dựng Giả Lập Một" → tự điền MST + CIF, nguồn "Nội bộ TPBank"');
     ok(!A[1].mst && A[1].cands === 2, '③ tên trùng 2 MST → KHÔNG tự điền, hiện 2 ứng viên để chọn');
     ok(!A[3].mst && A[3].kind === 'ca-nhan', '③ cá nhân → không tra');
+    // D18: tab "Có ứng viên MST chưa chọn" → tick → "Chấp nhận ứng viên MST #1" (dòng không có ứng viên bị bỏ qua)
+    await pM.click('#npTabs [data-tab=cands]'); await pM.waitForSelector('#npTabs [data-tab=cands].on');
+    const c1 = await pM.evaluate(() => { const A = CN.views.nap._state.assign; window.__snapA = JSON.parse(JSON.stringify(A)); return A[1].mstCands[0].mst; });
+    const nCands = await pM.$$eval('table.map tbody tr[data-i]', t => t.length);
+    await pM.click('#npSelAll'); await pM.waitForSelector('[data-bulk=mst1]:not([disabled])');
+    await pM.click('[data-bulk=mst1]'); await pM.waitForFunction(() => !CN.views.nap._state.assign[1].mstCands, { timeout: 30000 }); await idle(pM);
+    ok(await pM.evaluate(m => { const a = CN.views.nap._state.assign[1]; return a.mst === m && a.nguonMst && !a.mstCands; }, c1), 'tick ' + nCands + ' dòng + "Chấp nhận ứng viên MST #1" → điền MST ứng viên đầu (' + c1 + ')');
+    ok(!(await pM.$('#npTabs [data-tab=cands]')), 'hết ứng viên chờ chọn → tab "Có ứng viên MST" ẩn');
+    // trả dòng "Giả Lập Hai" về chưa có MST — phần sau kiểm gán MST ở trang Đối tác
+    await pM.evaluate(() => { CN.views.nap._state.assign.forEach((a, i) => { const s0 = window.__snapA[i]; Object.keys(a).forEach(k => { if (!(k in s0)) delete a[k]; }); Object.assign(a, s0); }); });
+    await pM.click('#npTabs [data-tab=all]'); await pM.waitForSelector('table.map tbody tr[data-i="3"]');
     ok(/tự điền 1/.test(await text(pM, '#npInt')) && /KH TPBank \(CIF\)/.test(await text(pM, '#npInt')), 'dòng trạng thái: số tự điền + số đối tác là KH TPBank');
     ok(/KH TPBank · CIF 77700001/.test(await text(pM, 'tr[data-i="0"]')), 'chip "KH TPBank · CIF" trên dòng đối tác');
     await shot(pM, '11_nap_mst_noi_bo');

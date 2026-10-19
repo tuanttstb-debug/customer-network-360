@@ -30,9 +30,12 @@
     const r = await CN.net.call('load', {}, { timeoutMs: CN.CONFIG.READ_TIMEOUT_MS });
     S.raw = null; S.user = r.user; S.pendingForMe = r.pendingForMe || 0; S.version = r.version;
     S.data = normalize(r); S.loadedAt = new Date();
-    S.M = CNModel.compute(S.data);
+    S.M = CNModel.compute(S.data, { chiCan: chiCan() });
     return S;
   }
+  /* Công tắc "Chỉ số đã cân" (D17): mặc định BẬT, nhớ theo máy — chỉ là tùy chọn hiển thị, không phải dữ liệu KH. */
+  const chiCan = () => CN.net.LS.get('cn360_chi_can') !== '0';
+  function setChiCan(on) { CN.net.LS.set('cn360_chi_can', on ? '1' : '0'); if (S.data) S.M = CNModel.compute(S.data, { chiCan: !!on }); }
 
   const role = () => (S.user ? S.user.role : '');
   const isAdmin = () => role() === 'Admin';
@@ -43,5 +46,5 @@
   /** Kho cho MAP131.assign ở bước gộp: đối tác + tên gộp đang thấy được. */
   const khoForMapping = () => ({ doiTac: S.data.doiTac.map(d => ({ id: d.id, mst: d.mst, ten: d.ten, caNhan: d.caNhan, ttMst: d.ttMst, nguonMst: d.nguonMst })), alias: S.data.tenGop.map(a => ({ raw: a.raw, key: a.key, id: a.id })) });
 
-  CN.store = { S, load, normalize, isAdmin, canDirect, canApprove, dtById, khByCif, khoForMapping, role };
+  CN.store = { S, load, chiCan, setChiCan, normalize, isAdmin, canDirect, canApprove, dtById, khByCif, khoForMapping, role };
 })();

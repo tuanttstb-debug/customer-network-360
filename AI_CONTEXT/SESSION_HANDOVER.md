@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-19 — CR đợt 1 PTKD MN sau test golden · v0.5.0, chỉ FE)
+- **Task completed:** đọc 3 email CR (Hương 15/10 · Ly 16/10 · Duyên 19/10) → đánh giá + anh chốt D17–D20 (kế hoạch `AIOS/08_Work/W-2610-he-sinh-thai-131-331/KE_HOACH_CR_V05.md`) → build: ① bước ③ **tab lọc** theo nhóm (trùng · gợi ý · mới · cá nhân · chưa MST · có ứng viên · có CIF) + **tick duyệt hàng loạt** (chấp nhận ứng viên MST #1 · gộp theo gợi ý #1 · giữ mới) + ghi "chưa có MST vẫn lưu được" (CR Ly) ② công tắc **"Chỉ số đã cân"** trên thanh đầu trang, mặc định BẬT: `model.compute(data, {chiCan})` bỏ dòng "Chưa cân" khỏi 360 + xuất CongNo; kho vẫn lưu đủ (CR Hương #5) ③ **Xuất Counterparty (template ver 3)** ở Danh mục → Xuất: 28 cột A–AB + 4 nhóm gộp ô, 1 dòng = đối tác × KHHH × TK × kỳ, B = MST/mã DT, D = mã CN của CIF đối tác (tra `mst-cif` lúc xuất), J = Σ(Nợ+Có) KHHH×TK×kỳ, S = công thức `IF(J=0,0,(H+I)/J)`, K–O · T–AB để trống (CR Duyên).
+- **Files changed:** `assets/js/views/{nap,danhmuc}.js` · `assets/js/{model,store,app,xlsx_io,config}.js` · `index.html` · `assets/css/app.css` · `test/{model.test,e2e}.mjs`.
+- **Decision made:** D17 lưu đủ, lọc khi dùng · D18 tick = duyệt hàng loạt (không tách lô) · D19 giữ mã DT, xuất MST ở cột ID · D20 K–O/CIC đợt 2, không lưu SĐT di động (ghi ở thẻ AIOS).
+- **Blocker:** không. Không đổi GAS → không cần clasp deploy.
+- **Next step:** [TT] thử LIVE: bước ③ tab/tick · công tắc · Danh mục → Xuất Counterparty → nghiệm thu 2026-10-22 → Pilot 2026-10-23 · [CC] đợt 2 sau 23/10: nạp "Bổ sung đối tác" theo MST · CIC · cấu hình cột cho BA.
+- **Regression risk:** thấp–TB — công tắc mặc định BẬT làm số 360 giảm nếu kho có dòng "Chưa cân" (có nhãn "ẩn N dòng"); bước ③ dài hơn → toast có thể che nút ④ vài giây. Hồi quy tệp thật: 4 tệp ICV 1.076/1.076 cân, tổng 6/6 ×4 (gồm `131.xlsx` Hương gửi: 6/6, tên đủ đuôi dự án). Excel COM mở file Counterparty: 0 ô lỗi, gộp ô đúng. Test: GAS 60 · mô hình 45 · MST 91 · Excel 26 · E2E 78.
+
 ## Delta phiên (2026-10-16 tối #3 — test LIVE tìm KH theo tên · v0.4.3–0.4.4)
 - **Task completed:** anh deploy GAS **@8** → test LIVE (Chrome, phiên anh): Danh mục tra thử "mat troi bach khoa" → ① KH TPBank 77768686 · CN 276-BTN-Bình Tân hạng 1 ✅ (lượt đầu ~40 s dựng bảng tên) · bước ① Nạp tên đầy đủ có dấu + "&" → 77768686 hạng 1 (~18 s) ✅. Phát hiện + sửa: (a) nhánh 900k vẫn xếp "MẶT TRỜI BẠC" đầu — chấm sơ bộ cắt 300 ứng viên trước khi xét "chứa đủ token" → v0.4.3 ưu tiên tên chứa đủ token khi cắt (nay 0304194942 77% hạng 1); (b) worker lấy `core/mstmatch.js` cũ từ cache HTTP Pages (~10 phút) → v0.4.4 fetch `no-cache`.
 - **Files changed:** `core/mstmatch.js` · `assets/js/{mstidx,config}.js` · `test/e2e.mjs` (chờ đúng lượt tra) · `tools/probe_kh_name.mjs`.

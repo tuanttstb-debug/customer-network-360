@@ -131,8 +131,12 @@
           const all = CN.store.canDirect();
           box.innerHTML = `<div class="card"><h2>Xuất dữ liệu ra Excel</h2><p>${all ? 'Bạn (Admin/Teamlead) xuất được <b>toàn bộ</b> dữ liệu đã duyệt.' : 'Bạn xuất được dữ liệu của <b>các KHHH có lô do bạn nạp</b>.'}
             File gồm: công nợ · đối tác · tên gộp · KHHH · 08 quan hệ · 09 cơ hội · 11 cảnh báo.</p><div class="alert warn">Mọi lần xuất được ghi nhật ký. File chứa thông tin khách hàng — chỉ lưu trên ổ nội bộ, không gửi ra ngoài.</div>
-            <div class="row"><button class="btn pri" id="xAll">Xuất Excel</button></div></div>`;
+            <div class="row"><button class="btn pri" id="xAll">Xuất Excel</button></div></div>
+            <div class="card"><h2>Xuất Counterparty (template ver 3)</h2><p>Sheet <b>Counterparty</b> đúng mẫu "TEMPLATE - KHHH TPBANK ver 3": 1 dòng = đối tác × KHHH × TK × kỳ — PS Nợ/Có, tổng phát sinh trên KHHH, tỷ trọng (công thức), MST/CIF/ĐVKD đối tác, MST/CIF/tên KHHH.</p>
+            <p class="muted small">Cột "MST (ID đối tác)": đối tác chưa có MST ghi mã DT. Cột doanh thu / trúng thầu / XNK / người đại diện và nhóm CIC để trống — bổ sung ở đợt 2. ${CN.store.chiCan() ? 'Đang bật "Chỉ số đã cân": bỏ dòng chưa cân.' : 'Đang TẮT "Chỉ số đã cân": gồm cả dòng chưa cân.'}</p>
+            <div class="row"><button class="btn pri" id="xCp">Xuất Counterparty</button></div></div>`;
           $('xAll').onclick = () => CN.xlsx.exportAll();
+          $('xCp').onclick = () => CN.xlsx.exportCounterparty();
         } else if (t === 'kho') {
           const empty = !S.data.doiTac.length;
           box.innerHTML = `<div class="card"><h2>Nhập 1 lần kho Excel của công cụ offline v0.1</h2><p class="muted small">Dùng khi chuyển từ công cụ HTML offline sang web: giữ nguyên mã DTxxxxx, tên gộp, KHHH, KH TPBank; mỗi KHHH + TK + kỳ thành 1 lô "Đã duyệt". Chỉ chạy được khi DB chưa có đối tác.</p>

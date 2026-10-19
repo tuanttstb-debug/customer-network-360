@@ -37,7 +37,9 @@
     return out;
   }
 
-  function compute(data) {
+  /** opt.chiCan (D17 — CR Hương): bỏ dòng "Chưa cân" khỏi mô hình (kho vẫn giữ đủ dòng); M.anChuaCan = số dòng bị ẩn. */
+  function compute(data, opt) {
+    const chiCan = !!(opt && opt.chiCan);
     const C = cfgOf(data.config);
     const lots = (data.lots || []).filter(l => l.status === 'Đã duyệt');
     const lotById = new Map(lots.map(l => [l.id, l]));
@@ -61,8 +63,10 @@
     const w3a = monthStart(report, -2), w3b = monthStart(report, -5);
 
     const E = new Map();
+    let anChuaCan = 0;
     (data.congNo || []).forEach(r => {
       const l = lotById.get(r.lot); if (!l) return;
+      if (chiCan && r.bal === 'Chưa cân') { anChuaCan++; return; }
       const d = dts.get(r.id); if (!d || d.caNhan) return;   // cá nhân: không lên mô hình quan hệ/cơ hội (R7)
       const k = l.cif + '|' + r.id;
       if (!E.has(k)) {
@@ -150,7 +154,7 @@
     const rR = rankBy(risks, r => r.prio, null, r => r.flag);
     risks.forEach(r => { r.rank = rR.get(r) || null; });
 
-    return { report, months, cfg: C, edges, byDt, byCif, opps, refs, risks: risks.filter(r => r.flag).sort((a, b) => a.rank - b.rank), allRisks: risks, daLaKH,
+    return { report, months, cfg: C, chiCan, anChuaCan, edges, byDt, byCif, opps, refs, risks: risks.filter(r => r.flag).sort((a, b) => a.rank - b.rank), allRisks: risks, daLaKH,
       stats: { khhh: byCif.size, doiTac: byDt.size, edges: edges.length, lots: lots.length, opps: opps.length, p1: opps.filter(o => o.priority[1] === '1').length, alerts: risks.filter(r => r.flag).length, shared: [...byDt.values()].filter(es => es.length >= 2).length } };
   }
 
@@ -160,6 +164,29 @@
       .sort((a, b) => b.share - a.share);
   }
 
-  const API = { compute, contagion, datedifM, monthStart, cfgOf, ROLE_BUY, ROLE_SUP };
+  /** Sheet "Counterparty" theo TEMPLATE - KHHH TPBANK ver 3 (CR Duyên 19/10): 1 dòng = đối tác × KHHH × TK (131/331, gộp TK con) × kỳ, lô "Đã duyệt".
+   *  opt.chiCan → bỏ dòng "Chưa cân" (D17) · opt.cifs (Set) → chỉ các KHHH này. J = Σ(PS Nợ + PS Có) mọi đối tác cùng KHHH × TK × kỳ. */
+  function counterparty(data, opt) {
+    opt = opt || {};
+    const lots = (data.lots || []).filter(l => l.status === 'Đã duyệt' && (!opt.cifs || opt.cifs.has(l.cif)));
+    const lotById = new Map(lots.map(l => [l.id, l]));
+    const dts = new Map((data.doiTac || []).map(d => [d.id, d])), khs = new Map((data.khhh || []).map(k => [k.cif, k]));
+    const G = new Map(), tot = new Map();
+    (data.congNo || []).forEach(r => {
+      const l = lotById.get(r.lot); if (!l || !r.id) return;
+      if (opt.chiCan && r.bal === 'Chưa cân') return;
+      const tk = String(l.tk).slice(0, 3), gk = l.cif + '|' + tk + '|' + l.ky, k = r.id + '|' + gk;
+      if (!G.has(k)) G.set(k, { id: r.id, cif: l.cif, tenKHLo: l.tenKH, tk, ky: l.ky, gk, no: 0, co: 0 });
+      const g = G.get(k), no = n(r.vals[2]), co = n(r.vals[3]);
+      g.no += no; g.co += co; tot.set(gk, (tot.get(gk) || 0) + no + co);
+    });
+    return [...G.values()].map(g => {
+      const d = dts.get(g.id) || {}, kh = khs.get(g.cif) || {};
+      return { id: g.id, mst: d.mst || '', cifDT: d.cifTP || '', ten: d.ten || g.id, caNhan: !!d.caNhan, ky: g.ky, tk: g.tk, no: g.no, co: g.co, tong: tot.get(g.gk) || 0,
+        mstKH: kh.mst || '', cif: g.cif, tenKH: kh.ten || g.tenKHLo || '' };
+    }).sort((a, b) => (a.cif < b.cif ? -1 : a.cif > b.cif ? 1 : 0) || a.tk.localeCompare(b.tk) || (a.ky < b.ky ? -1 : a.ky > b.ky ? 1 : 0) || (b.no + b.co) - (a.no + a.co));
+  }
+
+  const API = { compute, contagion, counterparty, datedifM, monthStart, cfgOf, ROLE_BUY, ROLE_SUP };
   if (typeof module !== 'undefined' && module.exports) module.exports = API; else G.CNModel = API;
 })(typeof window !== 'undefined' ? window : globalThis);

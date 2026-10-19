@@ -260,6 +260,7 @@
   /* ================= ③ Đối tác & MST (gồm UI tên pháp lý D11 của v0.1) ================= */
   const liveRows = () => N.batches.flatMap(b => b.rows.filter(r => !r.del && (r.ten || '').trim()).map(r => ({ b, r })));
   function buildAssign() {
+    N.sel = new Set();   // chỉ số dòng đổi khi dựng lại → bỏ chọn cũ
     const uniq = new Map();
     liveRows().forEach(({ b, r }) => { const raw = r.ten.trim(); if (!uniq.has(raw)) uniq.set(raw, { raw, n: 0, kh: new Set(), tk: new Set(), mst: '', caNhan: false }); const u = uniq.get(raw); u.n++; u.kh.add(b.tenKH); u.tk.add(b.tk); if (!u.mst && r.mstGoc) u.mst = r.mstGoc; if (r.caNhanGoc) u.caNhan = true; });
     const names = [...uniq.values()], K = kho(), thr = +(CN.store.S.data.config['Ngưỡng gợi ý gộp tên'] || 0.85);
@@ -289,17 +290,40 @@
     if (isExisting(a) && !a.tenSua) { a.tenNote = { src, nu: name, old: cur, applied: false }; return; }
     a.tenNote = { src, nu: name, old: cur, applied: true }; a.ten = name; a.tenSua = true;
   }
+  /* Tab lọc bước ③ (CR Ly 16/10 — D18): nhóm theo kết quả gộp + tình trạng MST */
+  const isCaNhan = a => !!(a.caNhan || a.kind === 'ca-nhan');
+  const TABS = [
+    ['all', 'Tất cả', 'gray', () => true],
+    ['ok', 'Trùng tên/MST/Tên gộp', 'ok', a => ['alias', 'mst', 'trung-ten'].includes(a.kind)],
+    ['goi-y', 'Gợi ý — chờ duyệt', 'warn', a => a.kind === 'goi-y'],
+    ['moi', 'Đối tác mới', 'info', a => a.kind === 'moi'],
+    ['ca-nhan', 'Cá nhân?', 'warn', isCaNhan],
+    ['no-mst', 'Chưa có MST', 'err', a => !a.mst && !isCaNhan(a)],
+    ['cands', 'Có ứng viên MST chưa chọn', 'warn', a => !!(a.mstCands && a.mstCands.length)],
+    ['cif', 'Là KH TPBank (CIF)', 'ok', a => !!a.cif],
+  ];
+  const tabOf = k => TABS.find(t => t[0] === k) || TABS[0];
   function step3(box) {
     if (!N.assign) buildAssign();
-    const cnt = k => N.assign.filter(a => a.kind === k).length;
+    if (!N.sel) N.sel = new Set();
+    const tab = tabOf(N.tab), shown = N.assign.map((a, i) => [a, i]).filter(([a]) => tab[3](a));
+    const nSel = shown.filter(([, i]) => N.sel.has(i)).length;
     box.innerHTML = `<div class="card"><h2>Tra MST</h2>
         <div class="row"><b>① Nội bộ TPBank (tra trước):</b><span id="npInt" class="small">${esc(intStatus())}</span><button class="btn sm" id="npIntAll">Tra lại nội bộ</button></div>
         <div class="row"><b>② Công cụ ngoài</b> <span class="muted small">— chỉ cho tên nội bộ không ra hoặc để kiểm trạng thái hoạt động.</span></div>
         <div class="row"><label>Khóa doanhnghiep.vn (miễn phí 1.000 lượt/tháng, lưu trên máy này) <input id="npDnKey" type="password" style="width:260px" value="${esc(CN.mst.key())}"></label><span id="npQuota" class="muted small"></span></div>
         <div class="row"><button class="btn" id="npVqrAll">Kiểm tất cả MST đã có (VietQR)</button><button class="btn" id="npDnAll">Tìm MST theo tên cho đối tác mới (doanhnghiep.vn)</button><span id="npMstSt" class="muted small"></span></div>
         <p class="muted small">Tra nội bộ chạy ngay trên máy này (không gửi tên đi đâu); chỉ tự điền khi khớp chắc chắn, còn lại hiện ứng viên để chọn. Công cụ ngoài chỉ nhận MST hoặc tên pháp nhân của đối tác — không gửi tên KHHH, số tiền, cá nhân.</p></div>
-      <div class="card"><h2>Đối tác ${chip(N.assign.length + ' tên', 'gray')}${Object.keys(KIND).filter(cnt).map(k => chip(KIND[k][0] + ': ' + cnt(k), KIND[k][1])).join('')}${chip(N.assign.filter(a => a.mst).length + ' có MST', 'gray')}</h2>
-        <div class="tblwrap"><table class="tbl map"><thead><tr><th>Tên đối tác (gốc)</th><th>Dòng · TK</th><th>Kết quả</th><th>Mã</th><th>Tên pháp lý (chuẩn)</th><th>MST</th><th>Tra MST</th></tr></thead><tbody>${N.assign.map(mapRow).join('')}</tbody></table></div>
+      <div class="card"><h2>Đối tác ${chip(N.assign.length + ' tên', 'gray')}${chip(N.assign.filter(a => a.mst).length + ' có MST', 'gray')}</h2>
+        <div class="tabs" id="npTabs">${TABS.map(([k, t, c, f]) => { const n = N.assign.filter(f).length; return k === 'all' || n ? `<button class="tab ${tab[0] === k ? 'on' : ''}" data-tab="${k}">${esc(t)} ${chip(n, c)}</button>` : ''; }).join('')}</div>
+        <div class="row" id="npBulk"><label><input type="checkbox" id="npSelAll" ${shown.length && nSel === shown.length ? 'checked' : ''}> Chọn tất cả trong tab (${shown.length})</label>
+          <span class="muted small" id="npSelN">Đã chọn ${nSel}</span>
+          <button class="btn sm" data-bulk="mst1" ${nSel ? '' : 'disabled'} title="Dòng có ứng viên MST: chọn ứng viên đứng đầu">Chấp nhận ứng viên MST #1</button>
+          <button class="btn sm" data-bulk="gop" ${nSel ? '' : 'disabled'} title="Dòng 'Gợi ý — chờ duyệt': gộp vào gợi ý đứng đầu">Gộp theo gợi ý #1</button>
+          <button class="btn sm" data-bulk="moi" ${nSel ? '' : 'disabled'} title="Dòng 'Gợi ý — chờ duyệt': không gộp, giữ là đối tác mới">Giữ là đối tác mới</button>
+          <button class="btn sm ghost" data-bulk="clear" ${N.sel.size ? '' : 'disabled'}>Bỏ chọn</button></div>
+        <p class="muted small">Đối tác <b>chưa có MST vẫn lưu được</b> (mã DT) — bổ sung MST sau ở trang Đối tác.</p>
+        <div class="tblwrap"><table class="tbl map"><thead><tr><th style="width:28px"></th><th>Tên đối tác (gốc)</th><th>Dòng · TK</th><th>Kết quả</th><th>Mã</th><th>Tên pháp lý (chuẩn)</th><th>MST</th><th>Tra MST</th></tr></thead><tbody>${shown.length ? shown.map(([a, i]) => mapRow(a, i)).join('') : '<tr><td colspan="8" class="muted">Không có dòng nào trong tab này.</td></tr>'}</tbody></table></div>
         ${CN.store.canDirect() ? '' : '<p class="muted small">Sửa tên/MST của đối tác <b>đã có trong kho</b> sẽ thành yêu cầu chờ teamlead duyệt.</p>'}</div>
       <div class="row end"><button class="btn" id="npBack2">‹ ② Duyệt số liệu</button><button class="btn pri" id="npToSave">Tiếp → ④ ${CN.store.canDirect() ? 'Lưu' : 'Gửi duyệt'}</button></div>`;
     bindMap(box);
@@ -391,7 +415,7 @@
       + (a.intAuto && a.mst === a.intAuto.mst ? '<br>' + chip('MST tự điền (nội bộ ' + Math.round(100 * a.intAuto.score) + '%)', 'ok') : '')
       + (a.cif ? '<br>' + chip('KH TPBank · CIF ' + a.cif.cif + (a.cif.via === 'cty-me' ? ' (cty mẹ)' : ''), 'ok') : '') + (a.intNone && !a.mst ? '<br>' + chip('Nội bộ không có', 'gray') : '');
     const st = a.ttMst ? `<div class="${/hoạt động/i.test(a.ttMst) && !/ngừng|tạm|bỏ địa chỉ|giải thể|không hoạt động/i.test(a.ttMst) ? 'okc' : 'errc'}"><small>${esc(a.ttMst)}${a.nguonMst ? ' · ' + esc(a.nguonMst) : ''}</small></div>` : '';
-    return `<tr data-i="${i}"><td>${esc(a.raw)}${sugg}</td><td><small>${a.n} dòng · TK ${esc(a.tk.join('/'))}</small></td>
+    return `<tr data-i="${i}"><td><input type="checkbox" data-sel ${N.sel.has(i) ? 'checked' : ''}></td><td>${esc(a.raw)}${sugg}</td><td><small>${a.n} dòng · TK ${esc(a.tk.join('/'))}</small></td>
       <td>${chip(KIND[a.kind] ? KIND[a.kind][0] : a.kind, KIND[a.kind] ? KIND[a.kind][1] : 'gray')}${ca && a.kind !== 'ca-nhan' ? '<br>' + chip('Cá nhân?', 'warn') : ''}${intChip}</td>
       <td class="code">${ex ? esc(fid) + '<br><small class="muted">đã có trong kho</small>' : '<small class="muted">mã mới<br>(cấp khi lưu)</small>'}${d && d.status === 'Chờ duyệt' ? '<br>' + chip('chờ duyệt', 'warn') : ''}</td>
       <td class="ten">${tenCell(a, ex)}</td>
@@ -418,13 +442,47 @@
       act('int', async () => { await intOne(a); again(); });
       act('web', () => window.open('https://masothue.com/Search/?q=' + encodeURIComponent(curTen(a) || a.raw) + '&type=auto', '_blank', 'noopener'));
       tr.querySelectorAll('[data-act=pickMst]').forEach(btn => btn.onclick = async () => {
-        const c = a.mstCands[+btn.dataset.j]; a.mst = c.mst; a.ttMst = c.status || ''; a.nguonMst = c.src; a.intAuto = null; a.intNone = false;
-        if (!c.srcName || VN_RE.test(c.name)) setTenFrom(a, c.name, c.srcName || 'doanhnghiep.vn');   // tên nội bộ không dấu → không ghi đè tên
-        a.mstCands = null;
-        try { const r = await CN.mstidx.cif([a.mst], 'Nạp dữ liệu (chọn MST)'); a.cif = r.map[a.mst] || null; } catch (e) { a.cif = null; }
+        pickCand(a, a.mstCands[+btn.dataset.j]);
+        await cifOf([a], 'Nạp dữ liệu (chọn MST)');
         again();
       });
+      const cb = tr.querySelector('input[data-sel]');
+      if (cb) cb.onchange = () => { if (cb.checked) N.sel.add(+tr.dataset.i); else N.sel.delete(+tr.dataset.i); again(); };
     });
+    box.querySelectorAll('#npTabs [data-tab]').forEach(b => b.onclick = () => { N.tab = b.dataset.tab; again(); });
+    const shownIdx = () => N.assign.map((a, i) => i).filter(i => tabOf(N.tab)[3](N.assign[i]));
+    if ($('npSelAll')) $('npSelAll').onchange = () => { shownIdx().forEach(i => ($('npSelAll').checked ? N.sel.add(i) : N.sel.delete(i))); again(); };
+    box.querySelectorAll('[data-bulk]').forEach(b => b.onclick = () => bulk(b.dataset.bulk, shownIdx().filter(i => N.sel.has(i)).map(i => N.assign[i]), again));
+  }
+  function pickCand(a, c) {
+    a.mst = c.mst; a.ttMst = c.status || ''; a.nguonMst = c.src; a.intAuto = null; a.intNone = false;
+    if (!c.srcName || VN_RE.test(c.name)) setTenFrom(a, c.name, c.srcName || 'doanhnghiep.vn');   // tên nội bộ không dấu → không ghi đè tên
+    a.mstCands = null;
+  }
+  async function cifOf(list, why) {
+    const ms = [...new Set(list.map(a => a.mst).filter(Boolean))];
+    if (!ms.length) return;
+    try { const r = await CN.mstidx.cif(ms, why); list.forEach(a => { a.cif = (a.mst && r.map[a.mst]) || null; }); } catch (e) { list.forEach(a => { a.cif = null; }); }
+  }
+  /** Thao tác hàng loạt trên các dòng đã chọn TRONG TAB đang xem (D18) — chỉ áp cho dòng hợp lệ, báo số dòng áp/bỏ qua. */
+  async function bulk(kind, list, again) {
+    if (kind === 'clear') { N.sel.clear(); again(); return; }
+    let ok = [];
+    if (kind === 'mst1') {
+      ok = list.filter(a => a.mstCands && a.mstCands.length && !isCaNhan(a));
+      ok.forEach(a => pickCand(a, a.mstCands[0]));
+      if (ok.length) { CN.ui.busy(true, 'Tra CIF ' + ok.length + ' MST…'); try { await cifOf(ok, 'Nạp dữ liệu (chọn MST hàng loạt)'); } finally { CN.ui.busy(false); } }
+    } else if (kind === 'gop') {
+      ok = list.filter(a => a.kind === 'goi-y' && a.cand && a.cand.length);
+      ok.forEach(a => { a.choice = a.cand[0].id; });
+    } else if (kind === 'moi') {
+      ok = list.filter(a => a.kind === 'goi-y');
+      ok.forEach(a => { a.choice = 'new'; });
+    }
+    const skip = list.length - ok.length;
+    CN.ui.toast('Đã áp ' + ok.length + ' dòng' + (skip ? ' · bỏ qua ' + skip + ' dòng không áp được' : ''), ok.length ? 'ok' : 'err');
+    ok.forEach(a => N.sel.delete(N.assign.indexOf(a)));
+    again();
   }
   async function mstVerify(a) {
     const r = await CN.mst.vietqr(a.mst);
@@ -468,7 +526,7 @@
         ${CN.ui.kpi('Đối tác mới', nNew, 'mã cấp khi lưu')}${CN.ui.kpi('Sửa đối tác đã có', nEdit, direct ? 'áp dụng ngay' : 'thành yêu cầu chờ duyệt')}</div>
       ${noKy ? `<div class="alert err">${noKy} tệp chưa có TK hoặc kỳ — quay lại ② nhập trước khi lưu.</div>` : ''}
       ${empty ? `<div class="alert err">${empty} tệp không còn dòng nào.</div>` : ''}
-      ${unb ? `<div class="alert warn">${unb} dòng chưa cân đối — vẫn lưu, ghi "Chưa cân".</div>` : ''}
+      ${unb ? `<div class="alert warn">${unb} dòng chưa cân đối — vẫn lưu vào kho (ghi "Chưa cân") nhưng <b>không tính vào 360 và file xuất</b> khi bật "Chỉ số đã cân" (góc trên). Muốn đưa vào: sửa ở bước ② trước khi lưu, hoặc nạp lại tệp sau (lô mới thay lô cũ).</div>` : ''}
       ${pend ? `<div class="alert warn">${pend} gợi ý gộp chưa chọn → sẽ giữ là đối tác mới.</div>` : ''}
       ${dup.length ? `<div class="alert warn">Kho đã có lô cùng KHHH + TK + kỳ: ${dup.map(o => esc(o.id) + ' (' + esc(o.tk) + ' · ' + CN.ui.dt(o.ky) + ')').join('; ')} → ${direct ? 'lô mới sẽ THAY THẾ lô cũ ngay khi lưu' : 'lô mới thay thế lô cũ khi teamlead duyệt'} (lô cũ giữ lại để truy vết).</div>` : ''}
       <div class="row end"><button class="btn" id="npBack3">‹ ③ Đối tác</button><button class="btn org" id="npSave" ${noKy || empty ? 'disabled' : ''}>${direct ? 'Lưu vào kho' : 'Gửi teamlead duyệt'}</button></div><div id="npSaveMsg"></div></div>`;

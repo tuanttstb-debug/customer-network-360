@@ -50,8 +50,16 @@
     $('dbStatus').textContent = S.loadedAt ? 'Dữ liệu lúc ' + S.loadedAt.toLocaleTimeString('vi-VN') + ' · ' + S.data.lots.filter(l => l.status === 'Đã duyệt').length + ' lô' : '–';
   }
 
+  function paintChiCan() {
+    const M = CN.store.S.M, on = CN.store.chiCan();
+    $('chiCan').checked = on;
+    $('chiCanN').innerHTML = on && M && M.anChuaCan ? CN.ui.chip('ẩn ' + M.anChuaCan + ' dòng chưa cân', 'warn') : '';
+  }
+  $('chiCan').onchange = () => { CN.store.setChiCan($('chiCan').checked); route(); };
+
   async function route() {
     if (!CN.store.S.data) return;
+    paintChiCan();
     const parts = location.hash.replace(/^#\/?/, '').split('/');
     const id = parts[0] || 'tong-quan', arg = parts[1] ? decodeURIComponent(parts[1]) : '';
     const V = VIEWS.find(x => x.id === id) || VIEWS[0];
