@@ -2,6 +2,14 @@
 
 **Từ phiên:** 2026-10-13 / Claude Code (hub AIOS) · **Cho:** phiên kế tiếp
 
+## Delta phiên (2026-10-24 — CR anh: User xuất theo team + Admin xóa bộ MẪU · v0.5.1)
+- **Task completed:** User xuất Excel/Counterparty theo phạm vi **team** (KHHH có lô do mình HOẶC đồng nghiệp cùng team nạp — backup nhau khi vận hành; Admin/Teamlead vẫn toàn bộ) · action GAS `delete-mau` + nút Danh mục › "Nhập kho / Xóa MẪU" (dryRun đếm → hỏi xác nhận; chỉ KHHH mà mọi lô đều do `MAU` nạp, KHHH đã có lô thật giữ nguyên; đối tác chỉ bộ mẫu dùng xóa kèm) · `_deleteCifs_` dùng chung với `delete-khhh`.
+- **Files changed:** `assets/js/{xlsx_io.js,views/danhmuc.js,config.js}` · `gas/{Service.gs,Code.gs,Config.gs}` · `test/{gas.test.mjs,e2e.mjs}` — `c6184cb`.
+- **Decision made:** phạm vi team theo cột Team của lô (team người nạp lúc nạp) — dữ liệu đã duyệt vốn mọi người XEM được (D09), CR chỉ mở quyền TẢI.
+- **Blocker:** cần [TT] `clasp push` + deploy GAS (giữ URL) — trước deploy nút "Xóa bộ MẪU" báo "Hành động không hỗ trợ"; xuất theo team chạy ngay (server chỉ chặn User xuất 'all').
+- **Next step:** [TT] deploy GAS → Admin bấm "Xóa bộ MẪU…" (xem danh sách CIF trong hộp xác nhận trước khi Xóa) → Ctrl+F5 kiểm tab Xuất dữ liệu bằng TK User team MN.
+- **Regression risk:** thấp — test GAS 67 · mô hình 45 · MST 91 · Excel 26 · E2E 81 pass; `delete-khhh` refactor giữ nguyên test cũ.
+
 ## Delta phiên (2026-10-19 — CR đợt 1 PTKD MN sau test golden · v0.5.0, chỉ FE)
 - **Task completed:** đọc 3 email CR (Hương 15/10 · Ly 16/10 · Duyên 19/10) → đánh giá + anh chốt D17–D20 (kế hoạch `AIOS/08_Work/W-2610-he-sinh-thai-131-331/KE_HOACH_CR_V05.md`) → build: ① bước ③ **tab lọc** theo nhóm (trùng · gợi ý · mới · cá nhân · chưa MST · có ứng viên · có CIF) + **tick duyệt hàng loạt** (chấp nhận ứng viên MST #1 · gộp theo gợi ý #1 · giữ mới) + ghi "chưa có MST vẫn lưu được" (CR Ly) ② công tắc **"Chỉ số đã cân"** trên thanh đầu trang, mặc định BẬT: `model.compute(data, {chiCan})` bỏ dòng "Chưa cân" khỏi 360 + xuất CongNo; kho vẫn lưu đủ (CR Hương #5) ③ **Xuất Counterparty (template ver 3)** ở Danh mục → Xuất: 28 cột A–AB + 4 nhóm gộp ô, 1 dòng = đối tác × KHHH × TK × kỳ, B = MST/mã DT, D = mã CN của CIF đối tác (tra `mst-cif` lúc xuất), J = Σ(Nợ+Có) KHHH×TK×kỳ, S = công thức `IF(J=0,0,(H+I)/J)`, K–O · T–AB để trống (CR Duyên).
 - **Files changed:** `assets/js/views/{nap,danhmuc}.js` · `assets/js/{model,store,app,xlsx_io,config}.js` · `index.html` · `assets/css/app.css` · `test/{model.test,e2e}.mjs`.
