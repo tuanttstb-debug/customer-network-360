@@ -6,8 +6,8 @@
 - **Task completed:** User xuất Excel/Counterparty theo phạm vi **team** (KHHH có lô do mình HOẶC đồng nghiệp cùng team nạp — backup nhau khi vận hành; Admin/Teamlead vẫn toàn bộ) · action GAS `delete-mau` + nút Danh mục › "Nhập kho / Xóa MẪU" (dryRun đếm → hỏi xác nhận; chỉ KHHH mà mọi lô đều do `MAU` nạp, KHHH đã có lô thật giữ nguyên; đối tác chỉ bộ mẫu dùng xóa kèm) · `_deleteCifs_` dùng chung với `delete-khhh`.
 - **Files changed:** `assets/js/{xlsx_io.js,views/danhmuc.js,config.js}` · `gas/{Service.gs,Code.gs,Config.gs}` · `test/{gas.test.mjs,e2e.mjs}` — `c6184cb`.
 - **Decision made:** phạm vi team theo cột Team của lô (team người nạp lúc nạp) — dữ liệu đã duyệt vốn mọi người XEM được (D09), CR chỉ mở quyền TẢI.
-- **Blocker:** cần [TT] `clasp push` + deploy GAS (giữ URL) — trước deploy nút "Xóa bộ MẪU" báo "Hành động không hỗ trợ"; xuất theo team chạy ngay (server chỉ chặn User xuất 'all').
-- **Next step:** [TT] deploy GAS → Admin bấm "Xóa bộ MẪU…" (xem danh sách CIF trong hộp xác nhận trước khi Xóa) → Ctrl+F5 kiểm tab Xuất dữ liệu bằng TK User team MN.
+- **Blocker:** không. ✅ GAS đã push + deploy **@9** (giữ URL `AKfycbxcAd3c…GzH25xw`), health trả `cn360-gas 0.1.1 (2026-10-24)`, `delete-mau` không token → AUTH_REQUIRED. Lưu ý: wrapper `clasp` (npm .cmd) treo trên máy này kể cả `--version` → gọi thẳng `node %APPDATA%/npm/node_modules/@google/clasp/build/src/index.js push --force` / `create-deployment -i <id>`.
+- **Next step:** [TT] Admin bấm "Xóa bộ MẪU…" (xem danh sách CIF trong hộp xác nhận trước khi Xóa) → Ctrl+F5 kiểm tab Xuất dữ liệu bằng TK User team MN.
 - **Regression risk:** thấp — test GAS 67 · mô hình 45 · MST 91 · Excel 26 · E2E 81 pass; `delete-khhh` refactor giữ nguyên test cũ.
 
 ## Delta phiên (2026-10-19 — CR đợt 1 PTKD MN sau test golden · v0.5.0, chỉ FE)

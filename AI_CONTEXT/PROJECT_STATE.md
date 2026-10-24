@@ -1,6 +1,6 @@
 # PROJECT STATE — Customer Network 360
 
-**Cập nhật:** 2026-10-24 · **Version:** 0.5.1 (CR anh: User xuất theo team · Admin xóa bộ MẪU — GAS chờ deploy) · trước: 0.5.0 (CR đợt 1 PTKD MN: tab/tick bước ③ · "Chỉ số đã cân" · Xuất Counterparty ver 3 — chỉ FE, GAS giữ @8) · trước: 0.4.4 (tìm KH theo tên: TPBank trước → 900k — LIVE PASS, GAS @8) · **Repo:** https://github.com/tuanttstb-debug/customer-network-360 (`main` v0.4.0) · **Prod:** https://tuanttstb-debug.github.io/customer-network-360/ ✅ **LIVE** (anh xác nhận 13/10)
+**Cập nhật:** 2026-10-24 · **Version:** 0.5.1 (CR anh: User xuất theo team · Admin xóa bộ MẪU — GAS @9) · trước: 0.5.0 (CR đợt 1 PTKD MN: tab/tick bước ③ · "Chỉ số đã cân" · Xuất Counterparty ver 3 — chỉ FE, GAS giữ @8) · trước: 0.4.4 (tìm KH theo tên: TPBank trước → 900k — LIVE PASS, GAS @8) · **Repo:** https://github.com/tuanttstb-debug/customer-network-360 (`main` v0.4.0) · **Prod:** https://tuanttstb-debug.github.io/customer-network-360/ ✅ **LIVE** (anh xác nhận 13/10)
 
 ## Tóm tắt
 Web CN360 v0.1.0 **build + LIVE trong ngày 13/10** theo kế hoạch đã duyệt (`PHUONG_AN_VA_KE_HOACH.md`): FE khuôn SHTD (8 trang) trên GitHub Pages + backend GAS deploy @1 + DB `CN360_DB` + lõi đọc 131–331 v0.1.
@@ -23,7 +23,7 @@ Web CN360 v0.1.0 **build + LIVE trong ngày 13/10** theo kế hoạch đã duy�
 ## Đang treo
 - [TT] Tải chỉ mục **`_build\20261016-1401\`** (2 tên + PTKD/loại/tỉnh) → thử chuẩn hóa KHHH đã đổi MST · xóa 12 KHHH MẪU (chưa chốt cách: tay ×12 hay nút Admin) → team MN nạp lô thật.
 - [TT] teamlead MN duyệt/từ chối lô `LO20261013-0001` (soát tên OCR bằng ảnh gốc trước) · xác nhận teamlead trong `User_Master` đúng Team.
-- [TT] `clasp push` + deploy GAS v0.5.1 (giữ URL) → Danh mục › "Nhập kho / Xóa MẪU" → Xóa bộ MẪU…
+- [TT] Danh mục › "Nhập kho / Xóa MẪU" → Xóa bộ MẪU… (GAS @9 đã deploy 24/10)
 - [CC] cột "KHHH cầu nối" trang Cơ hội hẹp → nới.
 
 ## Rủi ro / hiện tượng đã biết
