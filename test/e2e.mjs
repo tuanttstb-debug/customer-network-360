@@ -29,6 +29,7 @@ const USERS = [
   { username: 'admin1', displayName: 'Admin Giả', role: 'Admin', team: 'Số', password: 'a' },
   { username: 'tl_mn', displayName: 'Teamlead MN Giả', role: 'Teamlead', team: 'PTKD MN', password: 't' },
   { username: 'u_mn', displayName: 'Thành Viên MN Giả', role: 'User', team: 'PTKD MN', password: 'u' },
+  { username: 'u_mn2', displayName: 'Thành Viên MN Hai Giả', role: 'User', team: 'PTKD MN', password: 'u' },
   { username: 'u_mb', displayName: 'Thành Viên MB Giả', role: 'User', team: 'PTKD MB', password: 'u' },
 ];
 const env = makeEnv({ users: USERS, props: { AUTH_SECRET: 'e2e-secret' } }); env.ctx.setupAll();
@@ -255,7 +256,18 @@ try {
   await pMB.evaluate(() => { window.__NO_DOWNLOAD = true; window.__lastWb = null; });
   await pMB.evaluate(() => CN.xlsx.exportAll()); await pMB.waitForFunction(() => window.__lastWb, { timeout: 30000 });
   const xm = XLSX.read(Buffer.from(await pMB.evaluate(() => window.__lastWb), 'base64'));
-  ok(XLSX.utils.sheet_to_json(xm.Sheets.CongNo).length === 0, 'User xuất: chỉ KHHH mình nạp (MB chưa nạp → 0 dòng)');
+  ok(XLSX.utils.sheet_to_json(xm.Sheets.CongNo).length === 0, 'User xuất: chỉ KHHH của team mình (team MB chưa nạp → 0 dòng)');
+  // CR 24/10: User cùng team (không phải người nạp) xuất được dữ liệu team để backup nhau
+  const pMN2 = await newPage(env); await login(pMN2, 'u_mn2', 'u');
+  await pMN2.evaluate(() => { window.__NO_DOWNLOAD = true; window.__lastWb = null; });
+  await pMN2.evaluate(() => CN.xlsx.exportAll()); await pMN2.waitForFunction(() => window.__lastWb, { timeout: 30000 });
+  const x2 = XLSX.read(Buffer.from(await pMN2.evaluate(() => window.__lastWb), 'base64'));
+  const nTeam = await pMN2.evaluate(() => { const ids = new Set(CN.store.S.data.lots.filter(l => l.status === 'Đã duyệt' && l.team === 'PTKD MN').map(l => l.id)); return CN.store.S.data.congNo.filter(c => ids.has(c.lot) && !(CN.store.chiCan() && c.bal === 'Chưa cân')).length; });
+  ok(nTeam > 0 && XLSX.utils.sheet_to_json(x2.Sheets.CongNo).length === nTeam, 'User cùng team (không nạp lô): xuất đủ ' + nTeam + ' dòng công nợ của team MN');
+  await pMN2.evaluate(() => { window.__lastWb = null; }); await pMN2.evaluate(() => CN.xlsx.exportCounterparty()); await pMN2.waitForFunction(() => window.__lastWb, { timeout: 30000 });
+  const c2 = XLSX.read(Buffer.from(await pMN2.evaluate(() => window.__lastWb), 'base64'));
+  ok(XLSX.utils.sheet_to_json(c2.Sheets.Counterparty, { range: 1 }).length > 0, 'User cùng team: xuất Counterparty được');
+  ok(env.db().table('NhatKy').some(r => r['Người'] === 'u_mn2' && r['Hành động'] === 'Xuất Excel'), 'xuất của User cùng team được ghi nhật ký');
 
   console.log('— SSO từ phiên SHTD');
   const pSSO = await newPage(env);

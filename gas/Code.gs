@@ -15,6 +15,7 @@ var ACTIONS = {
   'set-khtp':       { fn: apiSetKhtp_, write: true },
   'set-config':     { fn: apiSetConfig_, write: true },
   'delete-khhh':    { fn: apiDeleteKhhh_, write: true },
+  'delete-mau':     { fn: apiDeleteMau_, write: true },
   'import-kho':     { fn: apiImportKho_, write: true },
   'audit':          { fn: apiAudit_ },
   'log':            { fn: apiLog_ },

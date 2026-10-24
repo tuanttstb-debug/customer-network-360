@@ -1,5 +1,5 @@
 'use strict';
-/* xlsx_io.js — Xuất Excel (ghi nhật ký; User chỉ xuất KHHH mình nạp) · đọc kho Excel v0.1 để nhập 1 lần · đọc danh mục KH TPBank. SheetJS tải khi cần. */
+/* xlsx_io.js — Xuất Excel (ghi nhật ký; User xuất KHHH của team mình) · đọc kho Excel v0.1 để nhập 1 lần · đọc danh mục KH TPBank. SheetJS tải khi cần. */
 (function () {
   const S = () => CN.store.S;
   const ws = (h, rows) => XLSX.utils.aoa_to_sheet([h, ...rows]);
@@ -11,10 +11,15 @@
   }
   const run = fn => async (...a) => { try { CN.ui.busy(true, 'Đang tạo file Excel…'); await CNLoad.ensureXlsx(); await fn(...a); CN.ui.toast('Đã xuất Excel (đã ghi nhật ký)', 'ok'); } catch (e) { CN.ui.toast(e.message, 'err'); } finally { CN.ui.busy(false); } };
 
-  /** Toàn bộ dữ liệu theo phạm vi quyền: Admin/Teamlead = tất cả; User = KHHH có lô do mình nạp. */
+  /** CIF trong phạm vi xuất của User: KHHH có lô do mình HOẶC thành viên cùng team nạp (CR 24/10 — backup nhau khi vận hành). */
+  function teamCifs(st) {
+    const me = st.user.username.toLowerCase(), team = String(st.user.team || '');
+    return new Set(st.data.lots.filter(l => l.by.toLowerCase() === me || (team && l.team === team)).map(l => l.cif));
+  }
+  /** Toàn bộ dữ liệu theo phạm vi quyền: Admin/Teamlead = tất cả; User = KHHH của team mình. */
   const exportAll = run(async () => {
-    const st = S(), all = CN.store.canDirect(), me = st.user.username.toLowerCase();
-    const myCif = new Set(st.data.lots.filter(l => l.by.toLowerCase() === me).map(l => l.cif));
+    const st = S(), all = CN.store.canDirect();
+    const myCif = teamCifs(st);
     const lots = st.data.lots.filter(l => l.status === 'Đã duyệt' && (all || myCif.has(l.cif))), lotIds = new Map(lots.map(l => [l.id, l]));
     const wb = XLSX.utils.book_new(), dt = new Map(st.data.doiTac.map(d => [d.id, d]));
     XLSX.utils.book_append_sheet(wb, ws(['Kỳ', 'Kỳ gốc', 'CN', 'CIF', 'Tên KHHH', 'TK', 'Mã ĐT nội bộ', 'Tên đối tác gốc', 'Counterparty_ID', 'Tên pháp lý', 'MST đối tác', 'Dư Nợ đầu kỳ', 'Dư Có đầu kỳ', 'Phát sinh Nợ', 'Phát sinh Có', 'Dư Nợ cuối kỳ', 'Dư Có cuối kỳ', 'Cân đối', 'Lô', 'Người nạp'],
@@ -30,7 +35,7 @@
       E.map(e => [e.cif, e.tenKH, e.team, e.id, e.ten, e.mst, e.daLaKH ? 'Có' : 'Không', e.role, e.evidence, e.psThu, e.thuHoi, e.duThu, e.tlThuHoi, e.psTra, e.traTien, e.duTra, e.tlTra, e.share, e.scale, Math.round(e.strength * 10) / 10, e.group, e.rankAll, e.rankByDt])), '08_Relationship_Edge');
     oppSheet(wb, all ? st.M.opps : st.M.opps.filter(o => (st.M.byDt.get(o.id) || []).some(e => myCif.has(e.cif))));
     riskSheet(wb, st.M.risks.filter(r => all || myCif.has(r.cif)));
-    await save(wb, fname('CN360_DuLieu'), all ? 'all' : 'mine', lots.length + ' lô');
+    await save(wb, fname('CN360_DuLieu'), all ? 'all' : 'team', lots.length + ' lô');
   });
   function oppSheet(wb, opps) {
     XLSX.utils.book_append_sheet(wb, ws(['Hạng', 'Counterparty_ID', 'Đối tác tiềm năng', 'MST', 'Vai trò chính', 'Số KHHH liên kết', 'PS phải thu', 'PS phải trả', 'Tổng quy mô quan hệ', 'KHHH cầu nối', 'CIF cầu nối', 'Team cầu nối', 'ĐVKD cầu nối', 'RM cầu nối', 'Điểm cơ hội', 'Mức ưu tiên', 'Hành động tiếp theo', 'TOI kỳ vọng'],
@@ -62,8 +67,8 @@
     return sh;
   }
   const exportCounterparty = run(async () => {
-    const st = S(), all = CN.store.canDirect(), me = st.user.username.toLowerCase();
-    const cifs = all ? null : new Set(st.data.lots.filter(l => l.by.toLowerCase() === me).map(l => l.cif));
+    const st = S(), all = CN.store.canDirect();
+    const cifs = all ? null : teamCifs(st);
     const rows = CNModel.counterparty(st.data, { chiCan: CN.store.chiCan(), cifs });
     if (!rows.length) throw new Error('Chưa có dữ liệu công nợ đã duyệt trong phạm vi của bạn.');
     let map = {};
@@ -71,7 +76,7 @@
     catch (e) { CN.ui.toast('Không tra được ĐVKD đối tác (' + e.message + ') — cột D để trống', 'err'); }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, counterpartySheet(rows, m => (m && map[m] && map[m].cn) || ''), 'Counterparty');
-    await save(wb, fname('CN360_Counterparty'), all ? 'all' : 'mine', rows.length + ' dòng' + (CN.store.chiCan() ? ' · chỉ số đã cân' : ''));
+    await save(wb, fname('CN360_Counterparty'), all ? 'all' : 'team', rows.length + ' dòng' + (CN.store.chiCan() ? ' · chỉ số đã cân' : ''));
   });
   const exportOpps = run(async () => { const wb = XLSX.utils.book_new(); oppSheet(wb, S().M.opps); await save(wb, fname('CN360_CoHoi'), 'view', S().M.opps.length + ' cơ hội'); });
   const exportRisks = run(async () => { const wb = XLSX.utils.book_new(); riskSheet(wb, S().M.risks); await save(wb, fname('CN360_RuiRo'), 'view', S().M.risks.length + ' cảnh báo'); });

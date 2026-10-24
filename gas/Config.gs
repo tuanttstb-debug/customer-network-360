@@ -7,7 +7,7 @@
 
 var USER_SPREADSHEET_ID = '1cpg1p_8TGGbvZNNWZmjsKANqHW1tQijbiQBFLYn56Hk';
 var USER_MASTER_SHEET   = 'User_Master';
-var APP_VERSION         = 'cn360-gas 0.1.0 (2026-10-13)';
+var APP_VERSION         = 'cn360-gas 0.1.1 (2026-10-24)';
 var WRITE_LOCK_MS       = 25000;
 
 // Tên sheet + cột (dòng 1 = tiêu đề; code đọc theo TÊN cột → thêm cột phụ bên phải không vỡ)

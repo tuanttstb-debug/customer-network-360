@@ -165,5 +165,31 @@ const n3 = E2.call({ action: 'submit-batch', token: tA, lots: [lot('800001', '13
 ok(n3.data.idMap.N === 'DT00013', 'sau nhập kho: mã mới tiếp nối DT00013 (không trùng mã cũ)');
 ok(E2.call({ action: 'import-kho', token: tA, doiTac: [{ id: 'DT00001', ten: 'x' }] }).status === 'error', 'nhập kho lần 2 vào DB đã có dữ liệu → chặn');
 
+console.log('— Admin: xóa bộ MẪU (CR 24/10)');
+const E3 = makeEnv({ users: USERS, props: { AUTH_SECRET: SECRET } }); E3.ctx.setupAll();
+const t3 = u => E3.call({ action: 'auth-login', username: u, password: USERS.find(x => x.username === u).password }).token;
+const tA3 = t3('admin1');
+E3.ctx.withLock_(() => {
+  E3.ctx.appendRows_('Lo', [
+    { 'Batch_ID': 'LO-M1', 'CIF': 'KH001', 'Người nạp': 'MAU', 'Trạng thái': 'Đã duyệt', 'Team': 'PTKD MN' },
+    { 'Batch_ID': 'LO-M2', 'CIF': 'KH002', 'Người nạp': 'MAU', 'Trạng thái': 'Đã duyệt', 'Team': 'PTKD MN' },
+    { 'Batch_ID': 'LO-R1', 'CIF': 'KH002', 'Người nạp': 'u_mn', 'Trạng thái': 'Đã duyệt', 'Team': 'PTKD MN' },
+    { 'Batch_ID': 'LO-R2', 'CIF': '900009', 'Người nạp': 'u_mn', 'Trạng thái': 'Đã duyệt', 'Team': 'PTKD MN' }]);
+  E3.ctx.appendRows_('KHHH', [{ 'CIF': 'KH001', 'Người tạo': 'MAU' }, { 'CIF': 'KH002', 'Người tạo': 'MAU' }, { 'CIF': 'KH003', 'Người tạo': 'MAU' }, { 'CIF': '900009', 'Người tạo': 'u_mn' }]);
+  E3.ctx.appendRows_('CongNo', [{ 'Batch_ID': 'LO-M1', 'Counterparty_ID': 'DT90001' }, { 'Batch_ID': 'LO-M1', 'Counterparty_ID': 'DT90003' },
+    { 'Batch_ID': 'LO-M2', 'Counterparty_ID': 'DT90002' }, { 'Batch_ID': 'LO-R2', 'Counterparty_ID': 'DT90003' }]);
+  E3.ctx.appendRows_('DoiTac', [{ 'Counterparty_ID': 'DT90001', 'Lô tạo': 'LO-M1' }, { 'Counterparty_ID': 'DT90002', 'Lô tạo': 'LO-M2' }, { 'Counterparty_ID': 'DT90003', 'Lô tạo': 'LO-M1' }]);
+});
+ok(E3.call({ action: 'delete-mau', token: t3('tl_mn'), dryRun: true }).error === 'FORBIDDEN', 'Teamlead xóa bộ MẪU → FORBIDDEN');
+r = E3.call({ action: 'delete-mau', token: tA3, dryRun: true });
+ok(r.data.cifs.sort().join() === 'KH001,KH003' && r.data.kept.join() === 'KH002' && E3.db().table('Lo').length === 4, 'dryRun: đếm 2 KHHH mẫu, giữ KHHH có lô thật, chưa xóa gì');
+r = E3.call({ action: 'delete-mau', token: tA3 });
+const cif3 = E3.db().table('KHHH').map(k => k['CIF']).sort().join(), dt3 = E3.db().table('DoiTac').map(d => d['Counterparty_ID']).sort().join();
+ok(r.data.lots === 1 && cif3 === '900009,KH002' && E3.db().table('Lo').map(l => l['Batch_ID']).sort().join() === 'LO-M2,LO-R1,LO-R2', 'xóa KHHH mẫu + lô mẫu; KHHH thật + KHHH mẫu có lô thật giữ nguyên');
+ok(dt3 === 'DT90002,DT90003', 'đối tác chỉ bộ mẫu dùng → xóa; đối tác lô thật còn dùng → giữ');
+ok(E3.db().table('NhatKy').some(x => x['Hành động'] === 'Xóa bộ MẪU'), 'ghi nhật ký "Xóa bộ MẪU"');
+ok(E3.call({ action: 'delete-mau', token: tA3, dryRun: true }).data.cifs.length === 0, 'chạy lại: không còn gì để xóa');
+ok(E3.call({ action: 'log', token: t3('u_mn'), what: 'Xuất Excel', scope: 'team' }).data.ok, 'User xuất phạm vi team → được (ghi nhật ký)');
+
 console.log(`GAS: ${pass} pass · ${fail} fail`);
 process.exit(fail ? 1 : 0);
